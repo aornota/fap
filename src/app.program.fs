@@ -20,8 +20,8 @@ type AppWindow() as this =
         base.Title <- Transition.AppName
         base.Width <- 800.0
         base.Height <- 600.0
-        base.MinWidth <- 526.0
-        base.MinHeight <- 526.0
+        base.MinWidth <- 800.0
+        base.MinHeight <- 600.0
         this.SystemDecorations <- SystemDecorations.Full
 
         //this.VisualRoot.VisualRoot.Renderer.DrawFps <- true

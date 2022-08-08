@@ -33,7 +33,7 @@ let update msg (state: State.State) (player: MediaPlayer) =
     match msg with
     | SetPlayState isPlaying -> { state with IsPlaying = isPlaying }, Cmd.none, None
     | Play song ->
-        use media = Player.Utilities.getMediaFromlocal song.path
+        use media = Utilities.getMediaFromlocal song.path
         player.Play media |> ignore
 
         let batch =

@@ -1,14 +1,14 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"type": "msbuild",
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build",
-			"label": "Build: Examples.Elmish.MusicPlayer.fsproj",
-			"detail": "Build the Examples.Elmish.MusicPlayer.fsproj project using dotnet build",
-		}
-	]
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "msbuild",
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": "build",
+            "label": "Build: fap.fsproj",
+            "detail": "Build the fap.fsproj project using dotnet build",
+        }
+    ]
 }
