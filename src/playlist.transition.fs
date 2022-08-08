@@ -50,6 +50,7 @@ let update (msg: Msg) (state: State.State) : State.State * Cmd<Msg> * ExternalMs
                 state, Cmd.none, None
             else
                 let song = songs.Item(state.CurrentIndex + 1)
+
                 state, Cmd.ofMsg (PlaySong song), None
         | None -> state, Cmd.none, None
     | GetPrevious ->

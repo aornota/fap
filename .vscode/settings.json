@@ -2,11 +2,8 @@
     "editor.fontSize": 12,
     "files.exclude": {
         ".config/": true,
-        ".ionide/": true,
         "src/bin/": true,
         "src/obj/": true,
-        ".editorconfig": true,
-        ".gitignore": true,
         "LICENSE": true
     },
     "FSharp.suggestGitignore": false,
