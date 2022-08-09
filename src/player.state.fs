@@ -1,4 +1,3 @@
-[<RequireQualifiedAccess>]
 module Aornota.Fap.Player.State
 
 type State =

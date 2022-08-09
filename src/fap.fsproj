@@ -11,9 +11,9 @@
         <Compile Include="dialogs.fs" />
         <Compile Include="extensions.fs" />
         <Compile Include="icons.fs" />
-        <Compile Include="playlist.state.fs" />
-        <Compile Include="playlist.transition.fs" />
-        <Compile Include="playlist.view.fs" />
+        <Compile Include="playlists.state.fs" />
+        <Compile Include="playlists.transition.fs" />
+        <Compile Include="playlists.view.fs" />
         <Compile Include="player.utilities.fs" />
         <Compile Include="player.state.fs" />
         <Compile Include="player.transition.fs" />
@@ -35,6 +35,7 @@
         <PackageReference Include="JaggerJo.Avalonia.FuncUI.Elmish" Version="0.5.3" />
 		<PackageReference Include="LibVLCSharp" Version="3.6.6" />
 		<PackageReference Include="TagLibSharp" Version="2.3.0" />
+		<PackageReference Include="Thoth.Json.Net" Version="8.0.0" />
         <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.17.4" />
     </ItemGroup>
 </Project>

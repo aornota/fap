@@ -1,4 +1,3 @@
-[<RequireQualifiedAccess>]
 module Aornota.Fap.App.Subscriptions
 
 open Aornota.Fap.App

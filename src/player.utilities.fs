@@ -1,4 +1,3 @@
-[<RequireQualifiedAccess>]
 module Aornota.Fap.Player.Utilities
 
 open LibVLCSharp.Shared

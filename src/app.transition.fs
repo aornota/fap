@@ -1,7 +1,7 @@
-[<RequireQualifiedAccess>]
 module Aornota.Fap.App.Transition
 
 open Aornota.Fap
+open Aornota.Fap.App.State
 open Aornota.Fap.Domain
 open Avalonia
 open Avalonia.FuncUI.Hosts
@@ -13,7 +13,7 @@ let AppName = "fap"
 
 type Msg =
     | PlayerMsg of Player.Transition.Msg
-    | PlaylistMsg of Playlist.Transition.Msg
+    | PlaylistsMsg of Playlists.Transition.Msg
     | SetTitle of string
     | OpenFiles
     | OpenFolder
@@ -27,44 +27,55 @@ type Msg =
     | ChapterChanged of int
     | LengthChanged of int64
 
-let private handlePlaylistExternal msg =
+let private handlePlaylistsExternal msg =
     match msg with
     | None -> Cmd.none
     | Some msg ->
         match msg with
-        | Playlist.Transition.ExternalMsg.PlaySong (int, song) ->
+        | Playlists.Transition.ExternalMsg.PlaySong (_, track) ->
             Cmd.batch
-                [ Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.Play song))
-                  Cmd.ofMsg (SetTitle song.name) ]
+                [ Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.Play track))
+                  Cmd.ofMsg (SetTitle track.Name) ]
+        | Playlists.Transition.ExternalMsg.Error text ->
+            // TODO-NMB...
+            Cmd.none
 
 let private handlePlayerExternal msg =
     match msg with
     | None -> Cmd.none
     | Some msg ->
         match msg with
-        | Player.Transition.ExternalMsg.Play -> Cmd.ofMsg (PlaylistMsg(Playlist.Transition.Msg.GetAny))
-        | Player.Transition.ExternalMsg.Next -> Cmd.ofMsg (PlaylistMsg(Playlist.Transition.Msg.GetNext))
-        | Player.Transition.ExternalMsg.Previous -> Cmd.ofMsg (PlaylistMsg(Playlist.Transition.Msg.GetPrevious))
+        | Player.Transition.ExternalMsg.Play ->
+            // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetAny))
+            Cmd.none
+        | Player.Transition.ExternalMsg.Next ->
+            // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetNext))
+            Cmd.none
+        | Player.Transition.ExternalMsg.Previous ->
+            // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetPrevious))
+            Cmd.none
+        | Player.Transition.ExternalMsg.Error text ->
+            // TODO-NMB...
+            Cmd.none
 
-let init: State.State =
+let init =
     { Title = AppName
       PlayerState = Player.Transition.init
-      PlaylistState = Playlist.Transition.init }
+      PlaylistsState = Playlists.Transition.init }
 
-let transition (msg: Msg) (state: State.State) (window: HostWindow) (player: MediaPlayer) =
+let transition msg (state: State.State) (window: HostWindow) (player: MediaPlayer) =
     match msg with
-    | PlayerMsg playermsg ->
-        let s, cmd, external = Player.Transition.update playermsg state.PlayerState player
-        let handled = handlePlayerExternal external
-        let mapped = Cmd.map PlayerMsg cmd
-        let batch = Cmd.batch [ mapped; handled ]
-        { state with PlayerState = s }, batch
-    | PlaylistMsg playlistmsg ->
-        let s, cmd, external = Playlist.Transition.update playlistmsg state.PlaylistState
-        let mapped = Cmd.map PlaylistMsg cmd
-        let handled = handlePlaylistExternal external
-        let batch = Cmd.batch [ mapped; handled ]
-        { state with PlaylistState = s }, batch
+    | PlayerMsg playerMsg ->
+        let newPlayerState, cmd, external =
+            Player.Transition.update playerMsg state.PlayerState player
+
+        { state with PlayerState = newPlayerState }, Cmd.batch [ Cmd.map PlayerMsg cmd; handlePlayerExternal external ]
+    | PlaylistsMsg playlistsMsg ->
+        let newPlaylistState, cmd, external =
+            Playlists.Transition.update playlistsMsg state.PlaylistsState
+
+        { state with PlaylistsState = newPlaylistState },
+        Cmd.batch [ Cmd.map PlaylistsMsg cmd; handlePlaylistsExternal external ]
     | SetTitle title ->
         window.Title <- $"{AppName} - {title}"
         { state with Title = title }, Cmd.none
@@ -83,16 +94,19 @@ let transition (msg: Msg) (state: State.State) (window: HostWindow) (player: Med
 
         state, Cmd.OfAsync.perform showDialog window AfterSelectFolder
     | AfterSelectFolder path ->
-        let songs = populateFromDirectory path |> Array.toList
-        state, Cmd.map PlaylistMsg (Cmd.ofMsg (Playlist.Transition.Msg.AddFiles songs))
+        (* TODO-NMB...let songs = populateFromDirectory path |> Array.toList
+        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs)) *)
+        state, Cmd.none
     | AfterSelectFiles paths ->
-        let songs = populateSongs paths |> Array.toList
-
-        state, Cmd.map PlaylistMsg (Cmd.ofMsg (Playlist.Transition.Msg.AddFiles songs))
+        (* TODO-NMB...let songs = populateSongs paths |> Array.toList
+        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs)) *)
+        state, Cmd.none
     | Playing -> state, Cmd.none // TODO-NMB: Is this necessary?...
     | Paused -> state, Cmd.none // TODO-NMB: Is this necessary?...
     | Stopped -> state, Cmd.none // TODO-NMB: Is this necessary?...
-    | Ended -> state, Cmd.map PlaylistMsg (Cmd.ofMsg (Playlist.Transition.Msg.GetNext))
+    | Ended ->
+        // TODO-NMB...state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.GetNext))
+        state, Cmd.none
     | TimeChanged time -> state, Cmd.map PlayerMsg (Cmd.ofMsg (Player.Transition.Msg.SetPos time))
     | ChapterChanged chapter -> state, Cmd.none // TODO-NMB: Is this necessary?...
     | LengthChanged length -> state, Cmd.none // TODO-NMB: Is this necessary?...

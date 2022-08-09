@@ -3,37 +3,32 @@ module Aornota.Fap.Domain
 open System
 open System.IO
 
-type SongRecord =
-    { id: Guid
-      name: string
-      path: string
-      createdAt: DateTime }
+type TrackId = TrackId of Guid
+
+type Track =
+    { Id: TrackId
+      Path: string
+      Name: string }
 
 let fileExtensions = [ "flac"; "mp3"; "wav" ]
 
-let private dottedFileExtensions = fileExtensions |> List.map (fun ext -> $".{ext}")
-
-let populateSongs (paths: string array) : SongRecord array =
+let populateSongs (paths: string array) : Track array =
     paths
     |> Array.Parallel.map FileInfo
-    |> Array.Parallel.map (fun info -> info.Name, info.FullName)
-    |> Array.Parallel.map (fun (name, path) ->
-        { id = Guid.NewGuid()
-          name = name
-          path = path
-          createdAt = DateTime.Now })
+    |> Array.Parallel.map (fun fi ->
+        { Id = TrackId(Guid.NewGuid())
+          Path = fi.FullName
+          Name = fi.Name })
 
-let populateFromDirectory (path: string) : SongRecord array =
+let populateFromDirectory (path: string) : Track array =
+    let dottedFileExtensions = fileExtensions |> List.map (fun ext -> $".{ext}")
+
     match String.IsNullOrEmpty path with
     | true -> Array.empty
     | false ->
-        let dirinfo = DirectoryInfo path
-
-        dirinfo.GetFiles()
-        |> Array.filter (fun info -> dottedFileExtensions |> List.contains info.Extension)
-        |> Array.Parallel.map (fun info -> info.Name, info.FullName)
-        |> Array.Parallel.map (fun (name, path) ->
-            { id = Guid.NewGuid()
-              name = name
-              path = path
-              createdAt = DateTime.Now })
+        (DirectoryInfo path).GetFiles()
+        |> Array.filter (fun fi -> dottedFileExtensions |> List.contains fi.Extension)
+        |> Array.Parallel.map (fun fi ->
+            { Id = TrackId(Guid.NewGuid())
+              Path = fi.FullName
+              Name = fi.Name })

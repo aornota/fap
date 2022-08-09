@@ -1,7 +1,8 @@
-[<RequireQualifiedAccess>]
 module Aornota.Fap.App.View
 
 open Aornota.Fap
+open Aornota.Fap.App.State
+open Aornota.Fap.App.Transition
 open Avalonia.Controls
 open Avalonia.Layout
 open Avalonia.FuncUI.DSL
@@ -22,12 +23,12 @@ let private menuBar (_: State.State) dispatch =
                                   MenuItem.icon (Image.FromString "avares://fap/assets/icons/select-folder.png")
                                   MenuItem.onClick (fun _ -> dispatch Transition.Msg.OpenFolder) ] ] ] ] ]
 
-let view (state: State.State) (dispatch: Transition.Msg -> unit) =
+let view state dispatch =
     DockPanel.create
         [ DockPanel.verticalAlignment VerticalAlignment.Stretch
           DockPanel.horizontalAlignment HorizontalAlignment.Stretch
           DockPanel.lastChildFill false
           DockPanel.children
               [ menuBar state dispatch
-                Playlist.View.view state.PlaylistState (Transition.Msg.PlaylistMsg >> dispatch)
-                Player.View.view state.PlayerState (Transition.Msg.PlayerMsg >> dispatch) ] ]
+                Playlists.View.view state.PlaylistsState (PlaylistsMsg >> dispatch)
+                Player.View.view state.PlayerState (PlayerMsg >> dispatch) ] ]
