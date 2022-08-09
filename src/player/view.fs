@@ -1,7 +1,7 @@
 module Aornota.Fap.Player.View
 
 open Aornota.Fap
-open Aornota.Fap.Player.State
+open Aornota.Fap.Player.Model
 open Aornota.Fap.Player.Transition
 open Avalonia.Controls
 open Avalonia.FuncUI.DSL

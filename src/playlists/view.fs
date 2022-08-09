@@ -1,7 +1,7 @@
 module Aornota.Fap.Playlists.View
 
 open Aornota.Fap.Domain
-open Aornota.Fap.Playlists.State
+open Aornota.Fap.Playlists.Model
 open Aornota.Fap.Playlists.Transition
 open Avalonia.Controls
 open Avalonia.FuncUI
@@ -44,7 +44,7 @@ let private itemsView (items: NonEmptyList<Item>) selectedTrackId (isPlayingTrac
           | None -> ()
           ListBox.itemTemplate (DataTemplateView<Item>.create (fun item -> itemView item isPlayingTrackId dispatch)) ]
 
-let private playlistView (playlist: State.Playlist) dispatch : IView =
+let private playlistView (playlist: Playlist) dispatch : IView =
     let content =
         match playlist.ItemsState with
         | NoItems ->

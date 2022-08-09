@@ -2,7 +2,7 @@ module Aornota.Fap.Player.Transition
 
 open Elmish
 open Aornota.Fap.Domain
-open Aornota.Fap.Player.State
+open Aornota.Fap.Player.Model
 open Aornota.Fap.Player.Utilities
 open LibVLCSharp.Shared
 open System.IO
@@ -30,7 +30,7 @@ let init: State =
       SliderPos = 0
       IsPlaying = false }
 
-let update msg (state: State.State) (player: MediaPlayer) =
+let transition msg (state: State) (player: MediaPlayer) =
     match msg with
     | SetPlayState isPlaying -> { state with IsPlaying = isPlaying }, Cmd.none, None
     | Play track ->

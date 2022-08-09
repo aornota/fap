@@ -1,7 +1,7 @@
 module Aornota.Fap.App.Transition
 
 open Aornota.Fap
-open Aornota.Fap.App.State
+open Aornota.Fap.App.Model
 open Aornota.Fap.Domain
 open Avalonia
 open Avalonia.FuncUI.Hosts
@@ -61,16 +61,16 @@ let init =
       PlaylistsState = Playlists.Transition.init
       Errors = [] }
 
-let transition msg (state: State.State) (window: HostWindow) (player: MediaPlayer) =
+let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     match msg with
     | PlayerMsg playerMsg ->
         let newPlayerState, cmd, external =
-            Player.Transition.update playerMsg state.PlayerState player
+            Player.Transition.transition playerMsg state.PlayerState player
 
         { state with PlayerState = newPlayerState }, Cmd.batch [ Cmd.map PlayerMsg cmd; handlePlayerExternal external ]
     | PlaylistsMsg playlistsMsg ->
         let newPlaylistState, cmd, external =
-            Playlists.Transition.update playlistsMsg state.PlaylistsState
+            Playlists.Transition.transition playlistsMsg state.PlaylistsState
 
         { state with PlaylistsState = newPlaylistState },
         Cmd.batch [ Cmd.map PlaylistsMsg cmd; handlePlaylistsExternal external ]

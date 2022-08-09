@@ -1,4 +1,4 @@
-module Aornota.Fap.App.State
+module Aornota.Fap.App.Model
 
 open Aornota.Fap
 open System
@@ -9,6 +9,6 @@ type ErrorId =
     static member Create() = ErrorId(Guid.NewGuid())
 
 type State =
-    { PlayerState: Player.State.State
-      PlaylistsState: Playlists.State.State
+    { PlayerState: Player.Model.State
+      PlaylistsState: Playlists.Model.State
       Errors: (ErrorId * string) list }

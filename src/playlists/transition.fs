@@ -1,7 +1,7 @@
 module Aornota.Fap.Playlists.Transition
 
 open Aornota.Fap.Domain
-open Aornota.Fap.Playlists.State
+open Aornota.Fap.Playlists.Model
 open Elmish
 
 type ExternalMsg =
@@ -36,7 +36,7 @@ let private tryFindTrack (playlists: Playlist list) trackId =
             | [] -> None
             | h :: t -> Some(playlist, NonEmptyList<TrackData>.Create (h, t)))
 
-let update msg (Playlists playlists) : State * Cmd<Msg> * ExternalMsg option =
+let transition msg (Playlists playlists) : State * Cmd<Msg> * ExternalMsg option =
     let error text =
         Playlists playlists, Cmd.none, Some(NotifyError text)
 

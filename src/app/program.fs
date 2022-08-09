@@ -1,7 +1,8 @@
 module Aornota.Fap.App.Program
 
 open Aornota.Fap
-open Aornota.Fap.App
+open Aornota.Fap.App.Transition
+open Aornota.Fap.App.View
 open Elmish
 open Avalonia
 open Avalonia.Controls
@@ -17,7 +18,7 @@ type AppWindow() as this =
     inherit HostWindow()
 
     do
-        base.Title <- Transition.AppName
+        base.Title <- AppName
         base.Width <- 800.0
         base.Height <- 600.0
         base.MinWidth <- 800.0
@@ -28,14 +29,13 @@ type AppWindow() as this =
         //this.VisualRoot.VisualRoot.Renderer.DrawDirtyRects <- true
 
         let player = Player.Utilities.getEmptyPlayer
-        let init _ = Transition.init, Cmd.none
+        let init _ = init, Cmd.none
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif
-        let updateWithServices (msg: Transition.Msg) (state: State.State) =
-            Transition.transition msg state this player
+        let updateWithServices msg state = transition msg state this player
 
-        Program.mkProgram init updateWithServices View.view
+        Program.mkProgram init updateWithServices view
         |> Program.withHost this
         |> Program.withSubscription (fun _ -> Subscriptions.playing player)
         |> Program.withSubscription (fun _ -> Subscriptions.paused player)

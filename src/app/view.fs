@@ -1,7 +1,7 @@
 module Aornota.Fap.App.View
 
 open Aornota.Fap
-open Aornota.Fap.App.State
+open Aornota.Fap.App.Model
 open Aornota.Fap.App.Transition
 open Avalonia.Controls
 open Avalonia.Layout

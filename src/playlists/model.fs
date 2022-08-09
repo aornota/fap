@@ -1,4 +1,4 @@
-module Aornota.Fap.Playlists.State
+module Aornota.Fap.Playlists.Model
 
 open Aornota.Fap.Domain
 open System

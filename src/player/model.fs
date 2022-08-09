@@ -1,4 +1,4 @@
-module Aornota.Fap.Player.State
+module Aornota.Fap.Player.Model
 
 type State =
     { Length: int64
