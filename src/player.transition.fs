@@ -1,20 +1,20 @@
 module Aornota.Fap.Player.Transition
 
 open Elmish
-open Aornota.Fap
 open Aornota.Fap.Domain
 open Aornota.Fap.Player.State
 open Aornota.Fap.Player.Utilities
 open LibVLCSharp.Shared
+open System.IO
 
 type ExternalMsg =
     | Next
     | Previous
     | Play // TODO-NMB: Is this necessary?...
-    | Error of string
+    | NotifyError of string
 
 type Msg =
-    | Play of Track
+    | Play of TrackData
     | Seek of double
     | SetPos of int64
     | SetLength of int64
@@ -34,7 +34,7 @@ let update msg (state: State.State) (player: MediaPlayer) =
     match msg with
     | SetPlayState isPlaying -> { state with IsPlaying = isPlaying }, Cmd.none, None
     | Play track ->
-        use media = getMediaFromlocal track.Path
+        use media = getMediaFromlocal (Path.Combine(track.Folder, track.Name))
         player.Play media |> ignore
 
         let batch =

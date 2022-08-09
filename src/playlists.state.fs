@@ -7,14 +7,18 @@ type NonEmptyList<'a> =
     { Head: 'a
       Tail: 'a list }
 
+    static member Create(head) = NonEmptyList<'a>.Create (head, [])
     static member Create(head, tail) = { Head = head; Tail = tail }
     member x.List = x.Head :: x.Tail
 
 type Item =
-    | Track of Track
+    | Track of TrackData
     | Summary
 
-type PlaylistId = PlaylistId of Guid
+type PlaylistId =
+    | PlaylistId of Guid
+
+    static member Create() = PlaylistId(Guid.NewGuid())
 
 type ItemsState =
     | NoItems
@@ -22,10 +26,9 @@ type ItemsState =
 
 type Playlist =
     { Id: PlaylistId
-      Path: string
-      Name: string
+      Name: string option
       ItemsState: ItemsState }
 
-type State =
-    | NoPlaylists
-    | Playlists of NonEmptyList<Playlist> * selected: PlaylistId
+    member x.NameOrDefault = x.Name |> Option.defaultValue "<unnamed>"
+
+type State = Playlists of NonEmptyList<Playlist>

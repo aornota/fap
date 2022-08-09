@@ -1,10 +1,14 @@
 module Aornota.Fap.App.State
 
 open Aornota.Fap
+open System
 
-// TODO-NMB: Handle errors...
+type ErrorId =
+    | ErrorId of Guid
+
+    static member Create() = ErrorId(Guid.NewGuid())
 
 type State =
-    { Title: string
-      PlayerState: Player.State.State
-      PlaylistsState: Playlists.State.State }
+    { PlayerState: Player.State.State
+      PlaylistsState: Playlists.State.State
+      Errors: (ErrorId * string) list }

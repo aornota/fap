@@ -12,6 +12,7 @@
         <Compile Include="extensions.fs" />
         <Compile Include="icons.fs" />
         <Compile Include="playlists.state.fs" />
+        <Compile Include="playlists.temp.fs" />
         <Compile Include="playlists.transition.fs" />
         <Compile Include="playlists.view.fs" />
         <Compile Include="player.utilities.fs" />

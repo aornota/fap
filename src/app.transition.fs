@@ -14,7 +14,9 @@ let AppName = "fap"
 type Msg =
     | PlayerMsg of Player.Transition.Msg
     | PlaylistsMsg of Playlists.Transition.Msg
-    | SetTitle of string
+    | SetTitle of TrackData * playlistName: string
+    | AddError of string
+    | DismissError of ErrorId
     | OpenFiles
     | OpenFolder
     | AfterSelectFolder of string
@@ -32,13 +34,11 @@ let private handlePlaylistsExternal msg =
     | None -> Cmd.none
     | Some msg ->
         match msg with
-        | Playlists.Transition.ExternalMsg.PlaySong (_, track) ->
+        | Playlists.Transition.ExternalMsg.RequestPlayTrack (trackData, playlistName) ->
             Cmd.batch
-                [ Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.Play track))
-                  Cmd.ofMsg (SetTitle track.Name) ]
-        | Playlists.Transition.ExternalMsg.Error text ->
-            // TODO-NMB...
-            Cmd.none
+                [ Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.Play trackData))
+                  Cmd.ofMsg (SetTitle(trackData, playlistName)) ]
+        | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
 let private handlePlayerExternal msg =
     match msg with
@@ -54,14 +54,12 @@ let private handlePlayerExternal msg =
         | Player.Transition.ExternalMsg.Previous ->
             // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetPrevious))
             Cmd.none
-        | Player.Transition.ExternalMsg.Error text ->
-            // TODO-NMB...
-            Cmd.none
+        | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
 let init =
-    { Title = AppName
-      PlayerState = Player.Transition.init
-      PlaylistsState = Playlists.Transition.init }
+    { PlayerState = Player.Transition.init
+      PlaylistsState = Playlists.Transition.init
+      Errors = [] }
 
 let transition msg (state: State.State) (window: HostWindow) (player: MediaPlayer) =
     match msg with
@@ -76,9 +74,12 @@ let transition msg (state: State.State) (window: HostWindow) (player: MediaPlaye
 
         { state with PlaylistsState = newPlaylistState },
         Cmd.batch [ Cmd.map PlaylistsMsg cmd; handlePlaylistsExternal external ]
-    | SetTitle title ->
-        window.Title <- $"{AppName} - {title}"
-        { state with Title = title }, Cmd.none
+    | AddError text -> { state with Errors = (ErrorId.Create(), text) :: state.Errors }, Cmd.none
+    | DismissError errorId ->
+        { state with Errors = state.Errors |> List.filter (fun error -> fst error <> errorId) }, Cmd.none
+    | SetTitle (trackData, playlistName) ->
+        window.Title <- $"{trackData.Name} | {playlistName} - {AppName}"
+        state, Cmd.none
     | OpenFiles ->
         let dialog = Dialogs.getFilesDialog None
 

@@ -7,7 +7,7 @@ open Avalonia.Controls
 open Avalonia.Layout
 open Avalonia.FuncUI.DSL
 
-let private menuBar (_: State.State) dispatch =
+let private menuBar dispatch =
     Menu.create
         [ Menu.dock Dock.Top
           Menu.viewItems
@@ -17,18 +17,18 @@ let private menuBar (_: State.State) dispatch =
                           [ MenuItem.create
                                 [ MenuItem.header "Select files"
                                   MenuItem.icon (Image.FromString "avares://fap/assets/icons/select-files.png")
-                                  MenuItem.onClick (fun _ -> dispatch Transition.Msg.OpenFiles) ]
+                                  MenuItem.onClick (fun _ -> dispatch OpenFiles) ]
                             MenuItem.create
                                 [ MenuItem.header "Select folder"
                                   MenuItem.icon (Image.FromString "avares://fap/assets/icons/select-folder.png")
-                                  MenuItem.onClick (fun _ -> dispatch Transition.Msg.OpenFolder) ] ] ] ] ]
+                                  MenuItem.onClick (fun _ -> dispatch OpenFolder) ] ] ] ] ]
 
 let view state dispatch =
+    // TODO-NMB: Display errors...
     DockPanel.create
         [ DockPanel.verticalAlignment VerticalAlignment.Stretch
           DockPanel.horizontalAlignment HorizontalAlignment.Stretch
           DockPanel.lastChildFill false
           DockPanel.children
-              [ menuBar state dispatch
-                Playlists.View.view state.PlaylistsState (PlaylistsMsg >> dispatch)
-                Player.View.view state.PlayerState (PlayerMsg >> dispatch) ] ]
+              [ (* TODO-NMB...menuBar dispatch *) Playlists.View.view state.PlaylistsState (PlaylistsMsg >> dispatch)
+                                                  Player.View.view state.PlayerState (PlayerMsg >> dispatch) ] ]

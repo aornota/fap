@@ -3,24 +3,27 @@ module Aornota.Fap.Domain
 open System
 open System.IO
 
-type TrackId = TrackId of Guid
+type TrackId =
+    | TrackId of Guid
 
-type Track =
+    static member Create() = TrackId(Guid.NewGuid())
+
+type TrackData =
     { Id: TrackId
-      Path: string
+      Folder: string
       Name: string }
 
 let fileExtensions = [ "flac"; "mp3"; "wav" ]
 
-let populateSongs (paths: string array) : Track array =
+let populateSongs (paths: string array) : TrackData array =
     paths
     |> Array.Parallel.map FileInfo
     |> Array.Parallel.map (fun fi ->
         { Id = TrackId(Guid.NewGuid())
-          Path = fi.FullName
+          Folder = fi.DirectoryName
           Name = fi.Name })
 
-let populateFromDirectory (path: string) : Track array =
+let populateFromDirectory (path: string) : TrackData array =
     let dottedFileExtensions = fileExtensions |> List.map (fun ext -> $".{ext}")
 
     match String.IsNullOrEmpty path with
@@ -30,5 +33,5 @@ let populateFromDirectory (path: string) : Track array =
         |> Array.filter (fun fi -> dottedFileExtensions |> List.contains fi.Extension)
         |> Array.Parallel.map (fun fi ->
             { Id = TrackId(Guid.NewGuid())
-              Path = fi.FullName
+              Folder = fi.DirectoryName
               Name = fi.Name })

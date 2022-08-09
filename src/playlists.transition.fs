@@ -5,8 +5,8 @@ open Aornota.Fap.Playlists.State
 open Elmish
 
 type ExternalMsg =
-    | PlaySong of index: int * song: Track
-    | Error of string
+    | RequestPlayTrack of TrackData * playlistName: string
+    | NotifyError of string
 
 type Msg =
     //| AddFiles of Track list
@@ -15,9 +15,9 @@ type Msg =
 //| GetNext
 //| GetPrevious
 
-// TODO-NMB: Fake "init" with test data...
+// TODO-NMB: Reinstate real "init"...
 
-let init = NoPlaylists
+let init = Temp.testState // TEMP-NMB
 
 let private tryFindTrack (playlists: Playlist list) trackId =
     playlists
@@ -28,32 +28,31 @@ let private tryFindTrack (playlists: Playlist list) trackId =
             let matches =
                 items.List
                 |> List.choose (function
-                    | Track track when track.Id = trackId -> Some track
+                    | Track trackData when trackData.Id = trackId -> Some trackData
                     | Track _
                     | Summary -> None)
 
             match matches with
             | [] -> None
-            | h :: t -> Some(playlist, NonEmptyList<Track>.Create (h, t)))
+            | h :: t -> Some(playlist, NonEmptyList<TrackData>.Create (h, t)))
 
-let update msg state : State * Cmd<Msg> * ExternalMsg option =
-    let error text = state, Cmd.none, Some(Error text)
+let update msg (Playlists playlists) : State * Cmd<Msg> * ExternalMsg option =
+    let error text =
+        Playlists playlists, Cmd.none, Some(NotifyError text)
 
     match msg with
     //| AddFiles files -> { state with SongList = Some files }, Cmd.none, None
     | PlayTrack trackId ->
-        match state with
-        | NoPlaylists -> error $"{nameof (PlayTrack)} {trackId} when {nameof (NoPlaylists)}"
-        | Playlists (playlists, selected) ->
-            match tryFindTrack playlists.List trackId with
-            | [] -> error $"{nameof (PlayTrack)} {trackId} found no matches"
-            | [ (playlist, tracks) ] ->
-                match tracks.List with
-                | [ track ] ->
-                    // TODO-NMB: Update state...
-                    state, Cmd.none, Some(PlaySong(0, track))
-                | _ -> error $"{nameof (PlayTrack)} {trackId} found multiple matches for playlist {playlist.Name}"
-            | _ -> error $"{nameof (PlayTrack)} {trackId} found matches for multiple playlists"
+        match tryFindTrack playlists.List trackId with
+        // TEMP-NMB: To force errors...match tryFindTrack playlists.List (TrackId.Create()) with
+        | [] -> error $"{nameof (PlayTrack)} {trackId} found no matches"
+        | [ (playlist, tracks) ] ->
+            match tracks.List with
+            | [ trackData ] ->
+                // TODO-NMB: Update state...
+                Playlists playlists, Cmd.none, Some(RequestPlayTrack(trackData, playlist.NameOrDefault))
+            | _ -> error $"{nameof (PlayTrack)} {trackId} found multiple matches for playlist {playlist.Name}"
+        | _ -> error $"{nameof (PlayTrack)} {trackId} found matches for multiple playlists"
 (* | GetAny ->
         match state.SongList with
         | Some songs ->
