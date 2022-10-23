@@ -11,7 +11,8 @@ type TrackId =
 type TrackData =
     { Id: TrackId
       Folder: string
-      Name: string }
+      Name: string
+      Duration: int64 option }
 
 let fileExtensions = [ "flac"; "mp3"; "wav" ]
 
@@ -21,7 +22,8 @@ let populateSongs (paths: string array) : TrackData array =
     |> Array.Parallel.map (fun fi ->
         { Id = TrackId(Guid.NewGuid())
           Folder = fi.DirectoryName
-          Name = fi.Name })
+          Name = fi.Name
+          Duration = None })
 
 let populateFromDirectory (path: string) : TrackData array =
     let dottedFileExtensions = fileExtensions |> List.map (fun ext -> $".{ext}")
@@ -34,4 +36,5 @@ let populateFromDirectory (path: string) : TrackData array =
         |> Array.Parallel.map (fun fi ->
             { Id = TrackId(Guid.NewGuid())
               Folder = fi.DirectoryName
-              Name = fi.Name })
+              Name = fi.Name
+              Duration = None })

@@ -7,7 +7,8 @@ let testState =
     let trackData folder name =
         { Id = TrackId.Create()
           Folder = folder
-          Name = name }
+          Name = name
+          Duration = None }
 
     let items (head: TrackData, tail: TrackData list) =
         NonEmptyList<Item>.Create (Track head, tail |> List.map (fun trackData -> Track trackData))
@@ -43,7 +44,7 @@ let testState =
             ) }
 
     let playlist2 =
-        let folder = @"D:\AUDIO\_MIXES\_tbc-a"
+        let folder = @"D:\AUDIO\_MIXES\- now we are 03 -"
 
         let track1 =
             trackData folder "01. msylma & ismael - بداية باليمين (enter stage right).wav"

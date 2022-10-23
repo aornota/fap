@@ -25,8 +25,8 @@ type AppWindow() as this =
         base.MinHeight <- 600.0
         this.SystemDecorations <- SystemDecorations.Full
 
-        //this.VisualRoot.VisualRoot.Renderer.DrawFps <- true
-        //this.VisualRoot.VisualRoot.Renderer.DrawDirtyRects <- true
+        //?this.VisualRoot.VisualRoot.Renderer.DrawFps <- true
+        //?this.VisualRoot.VisualRoot.Renderer.DrawDirtyRects <- true
 
         let player = Player.Utilities.getEmptyPlayer
         let init _ = init, Cmd.none
@@ -41,9 +41,7 @@ type AppWindow() as this =
         |> Program.withSubscription (fun _ -> Subscriptions.paused player)
         |> Program.withSubscription (fun _ -> Subscriptions.stopped player)
         |> Program.withSubscription (fun _ -> Subscriptions.ended player)
-        |> Program.withSubscription (fun _ -> Subscriptions.timeChanged player)
-        |> Program.withSubscription (fun _ -> Subscriptions.lengthChanged player)
-        |> Program.withSubscription (fun _ -> Subscriptions.chapterChanged player)
+        |> Program.withSubscription (fun _ -> Subscriptions.positionChanged player)
 #if DEBUG
         |> Program.withConsoleTrace
 #endif

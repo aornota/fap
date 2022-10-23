@@ -29,23 +29,9 @@ let ended (player: MediaPlayer) =
 
     Cmd.ofSub sub
 
-let timeChanged (player: MediaPlayer) =
+let positionChanged (player: MediaPlayer) =
     let sub dispatch =
-        player.TimeChanged.Subscribe(fun args -> dispatch (Transition.Msg.TimeChanged args.Time))
-        |> ignore
-
-    Cmd.ofSub sub
-
-let chapterChanged (player: MediaPlayer) =
-    let sub dispatch =
-        player.ChapterChanged.Subscribe(fun args -> dispatch (Transition.Msg.ChapterChanged args.Chapter))
-        |> ignore
-
-    Cmd.ofSub sub
-
-let lengthChanged (player: MediaPlayer) =
-    let sub dispatch =
-        player.LengthChanged.Subscribe(fun args -> dispatch (Transition.Msg.LengthChanged args.Length))
+        player.PositionChanged.Subscribe(fun args -> dispatch (Transition.Msg.PositionChanged args.Position))
         |> ignore
 
     Cmd.ofSub sub

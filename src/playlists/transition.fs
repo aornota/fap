@@ -5,7 +5,7 @@ open Aornota.Fap.Playlists.Model
 open Elmish
 
 type ExternalMsg =
-    | RequestPlayTrack of TrackData * playlistName: string
+    | RequestPlay of track: TrackData * playlistName: string * hasPrevious: bool * hasNext: bool
     | NotifyError of string
 
 type Msg =
@@ -50,7 +50,8 @@ let transition msg (Playlists playlists) : State * Cmd<Msg> * ExternalMsg option
             match tracks.List with
             | [ trackData ] ->
                 // TODO-NMB: Update state...
-                Playlists playlists, Cmd.none, Some(RequestPlayTrack(trackData, playlist.NameOrDefault))
+                // TODO-NMB: Ascertain hasPrevious | hasNext...
+                Playlists playlists, Cmd.none, Some(RequestPlay(trackData, playlist.NameOrDefault, false, false))
             | _ -> error $"{nameof (PlayTrack)} {trackId} found multiple matches for playlist {playlist.Name}"
         | _ -> error $"{nameof (PlayTrack)} {trackId} found matches for multiple playlists"
 (* | GetAny ->

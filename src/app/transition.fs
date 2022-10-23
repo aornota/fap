@@ -25,18 +25,16 @@ type Msg =
     | Paused
     | Stopped
     | Ended
-    | TimeChanged of int64
-    | ChapterChanged of int
-    | LengthChanged of int64
+    | PositionChanged of position: float32
 
 let private handlePlaylistsExternal msg =
     match msg with
     | None -> Cmd.none
     | Some msg ->
         match msg with
-        | Playlists.Transition.ExternalMsg.RequestPlayTrack (trackData, playlistName) ->
+        | Playlists.Transition.ExternalMsg.RequestPlay (trackData, playlistName, hasPrevious, hasNext) ->
             Cmd.batch
-                [ Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.Play trackData))
+                [ Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.PlayRequested(trackData, hasPrevious, hasNext)))
                   Cmd.ofMsg (SetTitle(trackData, playlistName)) ]
         | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
@@ -45,14 +43,23 @@ let private handlePlayerExternal msg =
     | None -> Cmd.none
     | Some msg ->
         match msg with
-        | Player.Transition.ExternalMsg.Play ->
-            // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetAny))
+        | Player.Transition.ExternalMsg.RequestPrevious (trackId, play) ->
+            // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetPrevious))
             Cmd.none
-        | Player.Transition.ExternalMsg.Next ->
+        | Player.Transition.ExternalMsg.RequestNext (trackId, play) ->
             // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetNext))
             Cmd.none
-        | Player.Transition.ExternalMsg.Previous ->
-            // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetPrevious))
+        | Player.Transition.ExternalMsg.NotifyDuration (trackID, length) ->
+            // TODO-NMB...
+            Cmd.none
+        | Player.Transition.ExternalMsg.NotifyPlaying trackID ->
+            // TODO-NMB...
+            Cmd.none
+        | Player.Transition.ExternalMsg.NotifyPaused trackID ->
+            // TODO-NMB...
+            Cmd.none
+        | Player.Transition.ExternalMsg.NotifyStopped trackID ->
+            // TODO-NMB...
             Cmd.none
         | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
@@ -64,10 +71,10 @@ let init =
 let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     match msg with
     | PlayerMsg playerMsg ->
-        let newPlayerState, cmd, external =
+        let newPlayerState, external =
             Player.Transition.transition playerMsg state.PlayerState player
 
-        { state with PlayerState = newPlayerState }, Cmd.batch [ Cmd.map PlayerMsg cmd; handlePlayerExternal external ]
+        { state with PlayerState = newPlayerState }, handlePlayerExternal external
     | PlaylistsMsg playlistsMsg ->
         let newPlaylistState, cmd, external =
             Playlists.Transition.transition playlistsMsg state.PlaylistsState
@@ -102,12 +109,9 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         (* TODO-NMB...let songs = populateSongs paths |> Array.toList
         state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs)) *)
         state, Cmd.none
-    | Playing -> state, Cmd.none // TODO-NMB: Is this necessary?...
-    | Paused -> state, Cmd.none // TODO-NMB: Is this necessary?...
-    | Stopped -> state, Cmd.none // TODO-NMB: Is this necessary?...
-    | Ended ->
-        // TODO-NMB...state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.GetNext))
-        state, Cmd.none
-    | TimeChanged time -> state, Cmd.map PlayerMsg (Cmd.ofMsg (Player.Transition.Msg.SetPos time))
-    | ChapterChanged chapter -> state, Cmd.none // TODO-NMB: Is this necessary?...
-    | LengthChanged length -> state, Cmd.none // TODO-NMB: Is this necessary?...
+    | Playing -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyPlaying)
+    | Paused -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyPaused)
+    | Stopped -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyStopped)
+    | Ended -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyEnded)
+    | PositionChanged position ->
+        state, Cmd.map PlayerMsg (Cmd.ofMsg (Player.Transition.Msg.NotifyPositionChanged position))
