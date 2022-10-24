@@ -24,11 +24,14 @@ type ItemsState =
     | NoItems
     | Items of NonEmptyList<Item> * selected: TrackId * isPlaying: TrackId option
 
+[<Literal>]
+let private UNNAMED = "- unnamed -"
+
 type Playlist =
     { Id: PlaylistId
       Name: string option
       ItemsState: ItemsState }
 
-    member x.NameOrDefault = x.Name |> Option.defaultValue "<unnamed>"
+    member x.NameOrDefault = x.Name |> Option.defaultValue UNNAMED
 
 type State = Playlists of NonEmptyList<Playlist>

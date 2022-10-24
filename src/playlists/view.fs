@@ -44,7 +44,7 @@ let private itemsView (items: NonEmptyList<Item>) selectedTrackId (isPlayingTrac
     ListBox.create
         [ ListBox.dataItems items.List
           // TODO-NMB: Improve this (e.g. capture "Window resized" and calculate accordingly?)...
-          ListBox.maxHeight 430.0
+          ListBox.maxHeight 400.0
           match selectedIndex with
           | Some selectedIndex -> ListBox.selectedIndex selectedIndex
           | None -> ()
