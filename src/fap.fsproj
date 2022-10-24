@@ -8,6 +8,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="literals.fs" />
+        <Compile Include="utilities.fs" />
         <Compile Include="domain.fs" />
         <Compile Include="dialogs.fs" />
         <Compile Include="extensions.fs" />
@@ -26,7 +28,6 @@
         <Compile Include="app\subscriptions.fs" />
         <Compile Include="app\program.fs" />
         <AvaloniaResource Include="assets\icons\**" />
-        <AvaloniaResource Include="styles\*.xaml" />
     </ItemGroup>
 
     <ItemGroup>

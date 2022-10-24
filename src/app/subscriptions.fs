@@ -35,3 +35,10 @@ let positionChanged (player: MediaPlayer) =
         |> ignore
 
     Cmd.ofSub sub
+
+let playbackErrored (player: MediaPlayer) =
+    let sub dispatch =
+        player.EncounteredError.Subscribe(fun _ -> dispatch Transition.Msg.PlaybackErrored)
+        |> ignore
+
+    Cmd.ofSub sub

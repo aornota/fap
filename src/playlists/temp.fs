@@ -30,12 +30,12 @@ let testState =
         let track8 = trackData folder "051 ^ ian william craig - stories.wav"
 
         let track9 =
-            trackData folder "051-056 ^ jean-philippe rameau (natacha kudritskaya) - les soupirs.wav"
+            trackData folder "ERROR -> 051-056 ^ jean-philippe rameau (natacha kudritskaya) - les soupirs.wav"
 
         let track10 = trackData folder "056 ^ midori takada - kannon-daiji.wav"
 
         { Id = PlaylistId.Create()
-          Name = Some "wip-b"
+          Name = Some "wip (mellow)"
           ItemsState =
             Items(
                 items (track1, [ track2; track3; track4; track5; track6; track7; track8; track9; track10 ]),
@@ -69,7 +69,7 @@ let testState =
         let track16 = trackData folder "16. msylma - li-kul-i murad-in hijaa.wav"
 
         { Id = PlaylistId.Create()
-          Name = Some "tbc-a"
+          Name = Some "now we are 03"
           ItemsState =
             Items(
                 items (

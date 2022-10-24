@@ -1,5 +1,7 @@
 module Aornota.Fap.Domain
 
+open Aornota.Fap.Literals
+open Aornota.Fap.Utilities
 open System
 open System.IO
 
@@ -12,9 +14,9 @@ type TrackData =
     { Id: TrackId
       Folder: string
       Name: string
-      Duration: int64 option }
+      Duration: int64<millisecond> option }
 
-let fileExtensions = [ "flac"; "mp3"; "wav" ]
+let fileExtensions = [ FILE_EXTENSION_FLAC; FILE_EXTENSION_MP3; FILE_EXTENSION_WAV ]
 
 let populateSongs (paths: string array) : TrackData array =
     paths

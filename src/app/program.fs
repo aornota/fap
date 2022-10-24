@@ -42,6 +42,7 @@ type AppWindow() as this =
         |> Program.withSubscription (fun _ -> Subscriptions.stopped player)
         |> Program.withSubscription (fun _ -> Subscriptions.ended player)
         |> Program.withSubscription (fun _ -> Subscriptions.positionChanged player)
+        |> Program.withSubscription (fun _ -> Subscriptions.playbackErrored player)
 #if DEBUG
         |> Program.withConsoleTrace
 #endif
@@ -52,7 +53,6 @@ type App() =
 
     override this.Initialize() =
         this.Styles.Add(FluentTheme(baseUri = null, Mode = FluentThemeMode.Dark))
-        this.Styles.Load "avares://fap/styles/styles.xaml"
         Core.Initialize()
 
     override this.OnFrameworkInitializationCompleted() =

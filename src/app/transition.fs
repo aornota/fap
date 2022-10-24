@@ -25,7 +25,8 @@ type Msg =
     | Paused
     | Stopped
     | Ended
-    | PositionChanged of position: float32
+    | PositionChanged of float32
+    | PlaybackErrored
 
 let private handlePlaylistsExternal msg =
     match msg with
@@ -34,7 +35,9 @@ let private handlePlaylistsExternal msg =
         match msg with
         | Playlists.Transition.ExternalMsg.RequestPlay (trackData, playlistName, hasPrevious, hasNext) ->
             Cmd.batch
-                [ Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.PlayRequested(trackData, hasPrevious, hasNext)))
+                [ Cmd.ofMsg (
+                      PlayerMsg(Player.Transition.Msg.PlayRequested(trackData, playlistName, hasPrevious, hasNext))
+                  )
                   Cmd.ofMsg (SetTitle(trackData, playlistName)) ]
         | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
@@ -49,16 +52,19 @@ let private handlePlayerExternal msg =
         | Player.Transition.ExternalMsg.RequestNext (trackId, play) ->
             // TODO-NMB...Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.GetNext))
             Cmd.none
-        | Player.Transition.ExternalMsg.NotifyDuration (trackID, length) ->
-            // TODO-NMB...
-            Cmd.none
-        | Player.Transition.ExternalMsg.NotifyPlaying trackID ->
+        | Player.Transition.ExternalMsg.NotifyPlaying (trackID, duration) ->
             // TODO-NMB...
             Cmd.none
         | Player.Transition.ExternalMsg.NotifyPaused trackID ->
             // TODO-NMB...
             Cmd.none
         | Player.Transition.ExternalMsg.NotifyStopped trackID ->
+            // TODO-NMB...
+            Cmd.none
+        | Player.Transition.ExternalMsg.NotifyEnded trackID ->
+            // TODO-NMB...
+            Cmd.none
+        | Player.Transition.ExternalMsg.NotifyPlaybackErrored trackID ->
             // TODO-NMB...
             Cmd.none
         | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
@@ -71,10 +77,10 @@ let init =
 let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     match msg with
     | PlayerMsg playerMsg ->
-        let newPlayerState, external =
+        let newPlayerState, cmd, external =
             Player.Transition.transition playerMsg state.PlayerState player
 
-        { state with PlayerState = newPlayerState }, handlePlayerExternal external
+        { state with PlayerState = newPlayerState }, Cmd.batch [ Cmd.map PlayerMsg cmd; handlePlayerExternal external ]
     | PlaylistsMsg playlistsMsg ->
         let newPlaylistState, cmd, external =
             Playlists.Transition.transition playlistsMsg state.PlaylistsState
@@ -115,3 +121,4 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     | Ended -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyEnded)
     | PositionChanged position ->
         state, Cmd.map PlayerMsg (Cmd.ofMsg (Player.Transition.Msg.NotifyPositionChanged position))
+    | PlaybackErrored -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyPlaybackErrored)

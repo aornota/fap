@@ -8,6 +8,12 @@ open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
 
+[<Literal>]
+let private NO_TRACKS = "- no tracks -"
+
+[<Literal>]
+let private SUMMARY = "- summary -"
+
 let private itemView (item: Item) (isPlayingTrackId: TrackId option) dispatch =
     match item with
     | Track track ->
@@ -20,12 +26,12 @@ let private itemView (item: Item) (isPlayingTrackId: TrackId option) dispatch =
                   match keyargs.Key with
                   | Key.Enter -> dispatch (Transition.Msg.PlaySong track)
                   | _ -> ()) *)
-              StackPanel.children [ TextBlock.create [ TextBlock.fontSize 12; TextBlock.text track.Name ] ] ]
+              StackPanel.children [ TextBlock.create [ TextBlock.fontSize 12.; TextBlock.text track.Name ] ] ]
     | Summary ->
         // TODO-NMB: Improve this...
         StackPanel.create
             [ StackPanel.spacing 4.0
-              StackPanel.children [ TextBlock.create [ TextBlock.fontSize 12; TextBlock.text "<summary>" ] ] ]
+              StackPanel.children [ TextBlock.create [ TextBlock.fontSize 12.; TextBlock.text SUMMARY ] ] ]
 
 let private itemsView (items: NonEmptyList<Item>) selectedTrackId (isPlayingTrackId: TrackId option) dispatch =
     // TODO-NMB: Transform items, e.g. calculate summary/ies...
@@ -49,12 +55,12 @@ let private playlistView (playlist: Playlist) dispatch : IView =
         match playlist.ItemsState with
         | NoItems ->
             // TODO-NMB: Improve this...
-            TextBlock.create [ TextBlock.fontSize 12; TextBlock.text "<no tracks>" ] :> IView
+            TextBlock.create [ TextBlock.fontSize 12.; TextBlock.text NO_TRACKS ] :> IView
         | Items (items, selected, isPlaying) -> itemsView items selected isPlaying dispatch
     // TODO-NMB: Show if currently playing (for playlist)...
     TabItem.create
         [ TabItem.header playlist.NameOrDefault
-          TabItem.fontSize 14
+          TabItem.fontSize 14.
           TabItem.content content ]
 
 let private playlistsView (playlists: NonEmptyList<Playlist>) dispatch =
