@@ -201,7 +201,7 @@ let transition msg (state: State) (player: MediaPlayer) =
 
                     { state with
                         TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
-                        SeekRequests = seekRequest :: state.SeekRequests },
+                        SeekRequests = (fst seekRequest) :: state.SeekRequests },
                     Cmd.OfAsync.perform delay () DebounceSeekRequest,
                     None
                 else
@@ -215,7 +215,7 @@ let transition msg (state: State) (player: MediaPlayer) =
             | Playing _ ->
                 let newSeekRequests =
                     state.SeekRequests
-                    |> List.filter (fun (otherSeekRequestId, _) -> otherSeekRequestId <> seekRequestId)
+                    |> List.filter (fun otherSeekRequestId -> otherSeekRequestId <> seekRequestId)
 
                 match newSeekRequests with
                 | _ :: _ -> { state with SeekRequests = newSeekRequests }, Cmd.none, None

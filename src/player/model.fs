@@ -26,7 +26,7 @@ type SeekRequestId =
 
 type State =
     { TrackState: TrackState option
-      SeekRequests: (SeekRequestId * float32) list }
+      SeekRequests: SeekRequestId list }
 
 [<Literal>]
 let START_POSITION = 0f
