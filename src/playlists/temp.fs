@@ -95,8 +95,65 @@ let testState =
             ) }
 
     let playlist3 =
+        let folder = @"D:\AUDIO\_MIXES\- sss0018 (for nick & olivia) -"
+
+        let track1 = trackData folder "01. donato dozzy & tin man - test 3.wav"
+
+        let track2 = trackData folder "02. plastikman - psyk.wav"
+
+        let track3 =
+            trackData folder "03. shackleton feat. vengeance tenfold - death is not final.wav"
+
+        let track4 =
+            trackData folder "04. dj sprinkles - masturjakor (bonus beats edit).wav"
+
+        let track5 = trackData folder "05. mlz - crossed swords (alice loop).wav"
+
+        let track6 =
+            trackData folder "06. paranoid london feat. mutado pintado - eating glue (album edit).wav"
+
+        let track7 = trackData folder "07. locked groove - oscillate.wav"
+        let track8 = trackData folder "08. horseshoe - bassfunk.wav"
+        let track9 = trackData folder "09. markus suckut - untitled #1.wav"
+
+        let track10 = trackData folder "10. blackdown - this journey vip.wav"
+
+        let track11 = trackData folder "11. overmono - so u kno.wav"
+        let track12 = trackData folder "12. jack junior - play it again.wav"
+        let track13 = trackData folder "13. neil landstrumm - tension in new york.wav"
+        let track14 = trackData folder "14. cab drivers - steam.wav"
+        let track15 = trackData folder "15. system 01 - drugs work.wav"
+        let track16 = trackData folder "16. d.i.e. - no future in detroit.wav"
+
+        { Id = PlaylistId.Create()
+          Name = Some "sss0018 (for nick & olivia)"
+          ItemsState =
+            Items(
+                items (
+                    track1,
+                    [ track2
+                      track3
+                      track4
+                      track5
+                      track6
+                      track7
+                      track8
+                      track9
+                      track10
+                      track11
+                      track12
+                      track13
+                      track14
+                      track15
+                      track16 ]
+                ),
+                track8.Id,
+                None
+            ) }
+
+    let playlist4 =
         { Id = PlaylistId.Create()
           Name = None
           ItemsState = NoItems }
 
-    Playlists(NonEmptyList<Playlist>.Create (playlist1, [ playlist2; playlist3 ]))
+    Playlists(NonEmptyList<Playlist>.Create (playlist1, [ playlist2; playlist3; playlist4 ]))
