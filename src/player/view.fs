@@ -29,8 +29,7 @@ let private progressBarAndTrackDetails state dispatch =
             | PlaybackErrored -> COLOUR_ERROR
         | None -> COLOUR_DISABLED_TEXT
 
-    let progressBar =
-        // TODO-NMB: Should slider be enabled when Paused | Stopped | &c.?...
+    let progressBar = // TODO-NMB: Should slider be enabled when Paused | Stopped | &c.?...
         let enabled, positionValue, duration =
             match state with
             | Some trackState ->
@@ -71,7 +70,7 @@ let private progressBarAndTrackDetails state dispatch =
                   TextBlock.margin (10, 0, 0, 0)
                   TextBlock.fontSize 12.
                   TextBlock.foreground textColour
-                  TextBlock.text (durationText duration) ]
+                  TextBlock.text (durationText RoundUp duration) ]
 
         StackPanel.create
             [ StackPanel.verticalAlignment VerticalAlignment.Center
