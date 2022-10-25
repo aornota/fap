@@ -93,3 +93,10 @@ let positionText (positionValue: float32) (duration: int64<millisecond> option) 
         let position = Math.Round((positionValue |> double) * (duration |> double)) |> int64
         formatTime NoRounding (position * 1L<millisecond>)
     | None -> "0:00"
+
+let isDebug =
+#if DEBUG
+    true
+#else
+    false
+#endif

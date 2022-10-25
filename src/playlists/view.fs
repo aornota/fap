@@ -7,6 +7,7 @@ open Avalonia.Controls
 open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
+open Avalonia.Layout
 
 [<Literal>]
 let private NO_TRACKS = "- no tracks -"
@@ -19,7 +20,7 @@ let private itemView (item: Item) (isPlayingTrackId: TrackId option) dispatch =
     | Track track ->
         // TODO-NMB: Show if currently playing - and additional info...
         StackPanel.create
-            [ StackPanel.spacing 4.0
+            [ StackPanel.spacing 2.
               StackPanel.onDoubleTapped ((fun _ -> dispatch (PlayTrack track.Id)))
               (* TODO-NMB: Get keyboard stuff working?...
               StackPanel.onKeyUp (fun keyargs ->
@@ -30,7 +31,7 @@ let private itemView (item: Item) (isPlayingTrackId: TrackId option) dispatch =
     | Summary ->
         // TODO-NMB: Improve this...
         StackPanel.create
-            [ StackPanel.spacing 4.0
+            [ StackPanel.spacing 2.
               StackPanel.children [ TextBlock.create [ TextBlock.fontSize 12.; TextBlock.text SUMMARY ] ] ]
 
 let private itemsView (items: NonEmptyList<Item>) selectedTrackId (isPlayingTrackId: TrackId option) dispatch =
@@ -42,12 +43,11 @@ let private itemsView (items: NonEmptyList<Item>) selectedTrackId (isPlayingTrac
             | Summary _ -> false)
 
     ListBox.create
-        [ ListBox.dataItems items.List
-          // TODO-NMB: Improve this (e.g. capture "Window resized" and calculate accordingly?)...
-          ListBox.maxHeight 400.0
+        [ ListBox.verticalAlignment VerticalAlignment.Top
           match selectedIndex with
           | Some selectedIndex -> ListBox.selectedIndex selectedIndex
           | None -> ()
+          ListBox.dataItems items.List
           ListBox.itemTemplate (DataTemplateView<Item>.create (fun item -> itemView item isPlayingTrackId dispatch)) ]
 
 let private playlistView (playlist: Playlist) dispatch : IView =
@@ -63,13 +63,11 @@ let private playlistView (playlist: Playlist) dispatch : IView =
           TabItem.fontSize 14.
           TabItem.content content ]
 
-let private playlistsView (playlists: NonEmptyList<Playlist>) dispatch =
+let view (Playlists playlists) dispatch =
     let tabs =
         playlists.List |> List.map (fun playlist -> playlistView playlist dispatch)
 
-    TabControl.create [ TabControl.tabStripPlacement Dock.Top; TabControl.viewItems tabs ]
-
-let view (Playlists playlists) dispatch =
-    StackPanel.create
-        [ StackPanel.dock Dock.Top
-          StackPanel.children [ playlistsView playlists dispatch ] ]
+    TabControl.create
+        [ TabControl.dock Dock.Top
+          TabControl.tabStripPlacement Dock.Top
+          TabControl.viewItems tabs ]

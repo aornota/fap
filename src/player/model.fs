@@ -8,7 +8,7 @@ type PlayerState =
     | AwaitingPlay
     | Playing of position: float32 * lastPositionChanged: float32 option
     | Paused of position: float32
-    | Stopped
+    | Stopped of position: float32
     | Ended
     | PlaybackErrored
 
@@ -25,7 +25,8 @@ type SeekRequestId =
     static member Create() = SeekRequestId(Guid.NewGuid())
 
 type State =
-    { TrackState: TrackState option
+    { Muted: bool
+      TrackState: TrackState option
       SeekRequests: SeekRequestId list }
 
 [<Literal>]

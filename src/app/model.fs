@@ -11,4 +11,5 @@ type ErrorId =
 type State =
     { PlayerState: Player.Model.State
       PlaylistsState: Playlists.Model.State
-      Errors: (ErrorId * string) list }
+      ShowingErrors: bool
+      Errors: (ErrorId * DateTime * string) list }

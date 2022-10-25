@@ -7,7 +7,6 @@ open Elmish
 open Avalonia
 open Avalonia.Controls
 open Avalonia.Controls.ApplicationLifetimes
-open Avalonia.FuncUI
 open Avalonia.FuncUI.Elmish
 open Avalonia.FuncUI.Hosts
 open Avalonia.Input
@@ -28,8 +27,11 @@ type AppWindow() as this =
         //?this.VisualRoot.VisualRoot.Renderer.DrawFps <- true
         //?this.VisualRoot.VisualRoot.Renderer.DrawDirtyRects <- true
 
+        let muted = false // TODO-NMB: Get from preferences?...
+
         let player = Player.Utilities.getEmptyPlayer
-        let init _ = init, Cmd.none
+        player.Mute <- muted
+        let init _ = init muted, Cmd.none
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif

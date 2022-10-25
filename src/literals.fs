@@ -11,7 +11,13 @@ let COLOUR_INACTIVE = "silver"
 let COLOUR_AWAITING = "yellow"
 
 [<Literal>]
+let COLOUR_BACKGROUND = "black"
+
+[<Literal>]
 let COLOUR_ERROR = "tomato"
+
+[<Literal>]
+let COLOUR_DEBUG = "plum"
 
 [<Literal>]
 let COLOUR_DISABLED_ICON = "black"
@@ -29,4 +35,9 @@ let FILE_EXTENSION_MP3 = "mp3"
 
 [<Literal>]
 let FILE_EXTENSION_WAV = "wav"
+// #endregion
+
+// #region Sizes
+[<Literal>]
+let SIZE_BUTTON_WITH_ICON = 30.
 // #endregion

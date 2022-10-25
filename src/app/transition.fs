@@ -7,6 +7,7 @@ open Avalonia
 open Avalonia.FuncUI.Hosts
 open Elmish
 open LibVLCSharp.Shared
+open System
 
 [<Literal>]
 let AppName = "fap"
@@ -15,8 +16,10 @@ type Msg =
     | PlayerMsg of Player.Transition.Msg
     | PlaylistsMsg of Playlists.Transition.Msg
     | SetTitle of TrackData * playlistName: string
+    | ToggleShowingErrors
     | AddError of string
-    | DismissError of ErrorId
+    | ClearError of ErrorId
+    | ClearAllErrors
     | OpenFiles
     | OpenFolder
     | AfterSelectFolder of string
@@ -69,9 +72,10 @@ let private handlePlayerExternal msg =
             Cmd.none
         | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
-let init =
-    { PlayerState = Player.Transition.init
+let init muted =
+    { PlayerState = Player.Transition.init muted
       PlaylistsState = Playlists.Transition.init
+      ShowingErrors = false
       Errors = [] }
 
 let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
@@ -87,9 +91,15 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
 
         { state with PlaylistsState = newPlaylistState },
         Cmd.batch [ Cmd.map PlaylistsMsg cmd; handlePlaylistsExternal external ]
-    | AddError text -> { state with Errors = (ErrorId.Create(), text) :: state.Errors }, Cmd.none
-    | DismissError errorId ->
-        { state with Errors = state.Errors |> List.filter (fun error -> fst error <> errorId) }, Cmd.none
+    | ToggleShowingErrors -> { state with ShowingErrors = not state.ShowingErrors }, Cmd.none
+    | AddError text -> { state with Errors = (ErrorId.Create(), DateTime.UtcNow, text) :: state.Errors }, Cmd.none
+    | ClearError errorId ->
+        { state with
+            Errors =
+                state.Errors
+                |> List.filter (fun (otherErrorId, _, _) -> otherErrorId <> errorId) },
+        Cmd.none
+    | ClearAllErrors -> { state with Errors = [] }, Cmd.none
     | SetTitle (trackData, playlistName) ->
         window.Title <- $"{trackData.Name} | {playlistName} - {AppName}"
         state, Cmd.none

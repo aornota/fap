@@ -18,18 +18,20 @@ type ExternalMsg =
     | NotifyEnded of trackId: TrackId
     | NotifyPlaybackErrored of trackId: TrackId
     | NotifyError of string
+// TODO-NMB: Save preferences (muted / volume / &c.)?...
 
 type Msg =
     | TrackSelected of track: TrackData * playlistName: string * hasPrevious: bool * hasNext: bool
     | PlayRequested of track: TrackData * playlistName: string * hasPrevious: bool * hasNext: bool
     | TrackContextUpdated of trackId: TrackId * playlistName: string * hasPrevious: bool * hasNext: bool
-    | RequestPrevious
-    | RequestNext
-    | RequestPlay
-    | RequestPause
-    | RequestStop
-    | RequestSeek of float32
+    | Seek of float32
     | DebounceSeekRequest of SeekRequestId * float32
+    | Previous
+    | Next
+    | Play
+    | Pause
+    | Stop
+    | ToggleMuted
     | NotifyPlaying
     | NotifyPaused
     | NotifyStopped
@@ -40,7 +42,10 @@ type Msg =
 [<Literal>]
 let private DEBOUNCE_SEEK_REQUEST_DELAY = 250
 
-let init = { TrackState = None; SeekRequests = [] }
+let init muted =
+    { Muted = muted
+      TrackState = None
+      SeekRequests = [] }
 
 let transition msg (state: State) (player: MediaPlayer) =
     let play track =
@@ -112,70 +117,7 @@ let transition msg (state: State) (player: MediaPlayer) =
         | _ ->
             // TODO-NMB: Should this be an error?...
             noChange
-    | RequestPrevious ->
-        match state.TrackState with
-        | Some trackState when trackState.HasPrevious ->
-            state, Cmd.none, Some(ExternalMsg.RequestPrevious(trackState.Track.Id, isPlaying trackState.PlayerState))
-        | Some _ -> notifyError "RequestPrevious when not trackState.HasPrevious"
-        | None -> notifyError "RequestPrevious when trackState is None"
-    | RequestNext ->
-        match state.TrackState with
-        | Some trackState when trackState.HasNext ->
-            state, Cmd.none, Some(ExternalMsg.RequestNext(trackState.Track.Id, isPlaying trackState.PlayerState))
-        | Some _ -> notifyError "RequestNext when not trackState.HasNext"
-        | None -> notifyError "RequestNext when trackState is None"
-    | RequestPlay ->
-        match state.TrackState with
-        | Some trackState ->
-            match trackState.PlayerState with
-            | NoMedia ->
-                let track = trackState.Track
-
-                play track
-
-                { state with TrackState = Some { trackState with PlayerState = AwaitingPlay } }, Cmd.none, None
-            | AwaitingPlay -> notifyError "RequestPlay when trackState.PlayerState is AwaitingPlay"
-            | Playing _ -> notifyError "RequestPlay when trackState.PlayerState already Playing"
-            | Paused position ->
-                player.Pause()
-
-                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } },
-                Cmd.none,
-                None
-            | Stopped ->
-                player.Play() |> ignore
-
-                { state with TrackState = Some { trackState with PlayerState = Playing(START_POSITION, None) } },
-                Cmd.none,
-                None
-            | Ended ->
-                // TODO-NMB: Does this work?...
-                player.Play() |> ignore
-
-                { state with TrackState = Some { trackState with PlayerState = Playing(START_POSITION, None) } },
-                Cmd.none,
-                None
-            | PlaybackErrored -> notifyError "RequestPlay when trackState.PlayerState is PlaybackErrored"
-        | None -> notifyError "RequestPlay when trackState is None"
-    | RequestPause ->
-        match state.TrackState with
-        | Some trackState ->
-            match trackState.PlayerState with
-            | Playing (position, _) ->
-                player.Pause()
-                { state with TrackState = Some { trackState with PlayerState = Paused position } }, Cmd.none, None
-            | _ -> notifyError "RequestPause when trackState.PlayerState not Playing"
-        | None -> notifyError "RequestPause when trackState is None"
-    | RequestStop ->
-        match state.TrackState with
-        | Some trackState ->
-            match trackState.PlayerState with
-            | Stopped -> notifyError "RequestStop when trackState.PlayerState already Stopped"
-            | _ ->
-                player.Stop()
-                { state with TrackState = Some { trackState with PlayerState = Stopped } }, Cmd.none, None
-        | None -> notifyError "RequestStop when trackState is None"
-    | RequestSeek position ->
+    | Seek position ->
         match state.TrackState with
         | Some trackState ->
             match trackState.PlayerState with
@@ -206,6 +148,10 @@ let transition msg (state: State) (player: MediaPlayer) =
                     None
                 else
                     noChange
+            | Paused _ ->
+                { state with TrackState = Some { trackState with PlayerState = Paused position } }, Cmd.none, None
+            | Stopped _ ->
+                { state with TrackState = Some { trackState with PlayerState = Stopped position } }, Cmd.none, None
             | _ -> noChange // No need to notify error for this...notifyError "RequestSeek when trackState.PlayerState not Playing"
         | None -> noChange // No need to notify error for this...notifyError "RequestSeek when trackState is None"
     | DebounceSeekRequest (seekRequestId, position) ->
@@ -229,6 +175,71 @@ let transition msg (state: State) (player: MediaPlayer) =
                     None
             | _ -> notifyError "DebounceSeekRequest when trackState.PlayerState not Playing"
         | None -> notifyError "DebounceSeekRequest when trackState is None"
+    | Previous ->
+        match state.TrackState with
+        | Some trackState when trackState.HasPrevious ->
+            state, Cmd.none, Some(ExternalMsg.RequestPrevious(trackState.Track.Id, isPlaying trackState.PlayerState))
+        | Some _ -> notifyError "RequestPrevious when not trackState.HasPrevious"
+        | None -> notifyError "RequestPrevious when trackState is None"
+    | Next ->
+        match state.TrackState with
+        | Some trackState when trackState.HasNext ->
+            state, Cmd.none, Some(ExternalMsg.RequestNext(trackState.Track.Id, isPlaying trackState.PlayerState))
+        | Some _ -> notifyError "RequestNext when not trackState.HasNext"
+        | None -> notifyError "RequestNext when trackState is None"
+    | Play ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | NoMedia
+            | Ended ->
+                play trackState.Track
+
+                { state with TrackState = Some { trackState with PlayerState = AwaitingPlay } }, Cmd.none, None
+            | AwaitingPlay _ -> notifyError "RequestPlay when trackState.PlayerState is AwaitingPlay"
+            | Playing _ -> notifyError "RequestPlay when trackState.PlayerState already Playing"
+            | Paused position ->
+                player.Pause()
+                player.Position <- position
+
+                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } },
+                Cmd.none,
+                None
+            | Stopped position ->
+                player.Play() |> ignore
+                player.Position <- position
+
+                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } },
+                Cmd.none,
+                None
+            | PlaybackErrored -> notifyError "RequestPlay when trackState.PlayerState is PlaybackErrored"
+        | None -> notifyError "RequestPlay when trackState is None"
+    | Pause ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing (position, _) ->
+                player.Pause()
+                { state with TrackState = Some { trackState with PlayerState = Paused position } }, Cmd.none, None
+            | _ -> notifyError "RequestPause when trackState.PlayerState not Playing"
+        | None -> notifyError "RequestPause when trackState is None"
+    | Stop ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing _
+            | Paused _ ->
+                player.Stop()
+
+                { state with TrackState = Some { trackState with PlayerState = Stopped START_POSITION } },
+                Cmd.none,
+                None
+            | _ -> notifyError "RequestStop when trackState.PlayerState neither Playing nor Paused"
+        | None -> notifyError "RequestStop when trackState is None"
+    | ToggleMuted ->
+        let newMuted = not state.Muted
+        player.Mute <- newMuted
+        { state with Muted = newMuted }, Cmd.none, None
     | NotifyPlaying ->
         match state.TrackState with
         | Some trackState ->
@@ -236,7 +247,7 @@ let transition msg (state: State) (player: MediaPlayer) =
 
             let newState =
                 match trackState.PlayerState with
-                | AwaitingPlay ->
+                | AwaitingPlay _ ->
                     { state with
                         TrackState =
                             Some
@@ -295,7 +306,7 @@ let transition msg (state: State) (player: MediaPlayer) =
         match state.TrackState with
         | Some trackState ->
             match trackState.PlayerState with
-            | AwaitingPlay ->
+            | AwaitingPlay _ ->
                 { state with TrackState = Some { trackState with PlayerState = PlaybackErrored } },
                 Cmd.none,
                 Some(ExternalMsg.NotifyPlaybackErrored trackState.Track.Id)
