@@ -26,6 +26,7 @@ type SeekRequestId =
 
 type State =
     { Muted: bool
+      Volume: int
       TrackState: TrackState option
       SeekRequests: SeekRequestId list }
 

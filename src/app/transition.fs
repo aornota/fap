@@ -3,14 +3,12 @@ module Aornota.Fap.App.Transition
 open Aornota.Fap
 open Aornota.Fap.App.Model
 open Aornota.Fap.Domain
+open Aornota.Fap.Literals
 open Avalonia
 open Avalonia.FuncUI.Hosts
 open Elmish
 open LibVLCSharp.Shared
 open System
-
-[<Literal>]
-let AppName = "fap"
 
 type Msg =
     | PlayerMsg of Player.Transition.Msg
@@ -72,8 +70,8 @@ let private handlePlayerExternal msg =
             Cmd.none
         | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
-let init muted =
-    { PlayerState = Player.Transition.init muted
+let init muted volume =
+    { PlayerState = Player.Transition.init muted volume
       PlaylistsState = Playlists.Transition.init
       ShowingErrors = false
       Errors = [] }
@@ -101,7 +99,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         Cmd.none
     | ClearAllErrors -> { state with Errors = [] }, Cmd.none
     | SetTitle (trackData, playlistName) ->
-        window.Title <- $"{trackData.Name} | {playlistName} - {AppName}"
+        window.Title <- $"{trackData.Name} | {playlistName} - {APPLICATION_NAME}"
         state, Cmd.none
     | OpenFiles ->
         let dialog = Dialogs.getFilesDialog None

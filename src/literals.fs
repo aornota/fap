@@ -1,5 +1,8 @@
 module Aornota.Fap.Literals
 
+[<Literal>]
+let APPLICATION_NAME = "fap"
+
 // #region Colours
 [<Literal>]
 let COLOUR_ACTIVE = "cyan"
@@ -12,6 +15,9 @@ let COLOUR_AWAITING = "yellow"
 
 [<Literal>]
 let COLOUR_BACKGROUND = "black"
+
+[<Literal>]
+let COLOUR_VOLUME = "violet"
 
 [<Literal>]
 let COLOUR_ERROR = "tomato"

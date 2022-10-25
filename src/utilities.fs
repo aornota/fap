@@ -94,6 +94,11 @@ let positionText (positionValue: float32) (duration: int64<millisecond> option) 
         formatTime NoRounding (position * 1L<millisecond>)
     | None -> "0:00"
 
+let playerVolume (volume: int) =
+    match Math.Max(Math.Min(volume, 100), 0) with
+    | 0 -> 0
+    | volume -> Math.Log10(volume) * 50. |> int
+
 let isDebug =
 #if DEBUG
     true

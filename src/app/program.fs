@@ -3,6 +3,8 @@ module Aornota.Fap.App.Program
 open Aornota.Fap
 open Aornota.Fap.App.Transition
 open Aornota.Fap.App.View
+open Aornota.Fap.Literals
+open Aornota.Fap.Utilities
 open Elmish
 open Avalonia
 open Avalonia.Controls
@@ -17,7 +19,7 @@ type AppWindow() as this =
     inherit HostWindow()
 
     do
-        base.Title <- AppName
+        base.Title <- APPLICATION_NAME
         base.Width <- 800.0
         base.Height <- 600.0
         base.MinWidth <- 800.0
@@ -27,11 +29,13 @@ type AppWindow() as this =
         //?this.VisualRoot.VisualRoot.Renderer.DrawFps <- true
         //?this.VisualRoot.VisualRoot.Renderer.DrawDirtyRects <- true
 
-        let muted = false // TODO-NMB: Get from preferences?...
+        // TODO-NMB: Get from preferences?...
+        let muted, volume = false, 100
 
         let player = Player.Utilities.getEmptyPlayer
         player.Mute <- muted
-        let init _ = init muted, Cmd.none
+        player.Volume <- playerVolume volume
+        let init _ = init muted volume, Cmd.none
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif

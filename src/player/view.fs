@@ -14,9 +14,7 @@ open Avalonia.Media
 [<Literal>]
 let private NO_SELECTED_TRACK = "- no track selected -"
 
-// TODO-NMB: Volume control (e.g. Slider)?...
-
-let private textColour state =
+let private colour state =
     match state with
     | Some trackState ->
         match trackState.PlayerState with
@@ -30,7 +28,7 @@ let private textColour state =
     | None -> COLOUR_DISABLED_TEXT
 
 let private progressBar state dispatch =
-    let textColour = textColour state
+    let colour = colour state
 
     let enabled, positionValue, duration =
         match state with
@@ -51,7 +49,7 @@ let private progressBar state dispatch =
               TextBlock.textAlignment TextAlignment.Right
               TextBlock.width 40.
               TextBlock.fontSize 12.
-              TextBlock.foreground textColour
+              TextBlock.foreground colour
               TextBlock.text (positionText positionValue duration) ]
 
     let slider =
@@ -60,6 +58,7 @@ let private progressBar state dispatch =
               Slider.width 500.
               Slider.minimum 0.
               Slider.maximum 100.
+              Slider.foreground colour
               Slider.isEnabled enabled
               Slider.value (positionValue * 100f |> double)
               Slider.tip "Seek within track"
@@ -71,7 +70,7 @@ let private progressBar state dispatch =
               TextBlock.textAlignment TextAlignment.Left
               TextBlock.width 40.
               TextBlock.fontSize 12.
-              TextBlock.foreground textColour
+              TextBlock.foreground colour
               TextBlock.text (durationText RoundUp duration) ]
 
     StackPanel.create
@@ -82,8 +81,9 @@ let private progressBar state dispatch =
           StackPanel.children [ position; slider; duration ] ]
 
 let private trackDetails state =
-    let textColour = textColour state
+    let colour = colour state
 
+    // TODO-NMB: Use "metadata" (if available)?...
     let details =
         match state with
         | Some trackState -> $"{trackState.Track.Name} | {trackState.PlaylistName}"
@@ -92,7 +92,7 @@ let private trackDetails state =
     TextBlock.create
         [ TextBlock.horizontalAlignment HorizontalAlignment.Center
           TextBlock.fontSize 12
-          TextBlock.foreground textColour
+          TextBlock.foreground colour
           TextBlock.text details ]
 
 let private media state dispatch =
@@ -137,11 +137,17 @@ let private media state dispatch =
         else
             COLOUR_INACTIVE
 
-    let muteOrUnmuteIcon, muteOrUnmuteColour, muteOrUnmuteTip =
+    let muteOrUnmuteIcon, muteOrUnmuteTip =
         if state.Muted then
-            Icons.muted, COLOUR_INACTIVE, "Unmute"
+            Icons.muted, "Unmute"
         else
-            Icons.unmuted, COLOUR_ACTIVE, "Mute"
+            let icon =
+                match state.Volume with
+                | volume when volume < 34 -> Icons.unmutedLow
+                | volume when volume < 67 -> Icons.unmutedMedium
+                | _ -> Icons.unmutedHigh
+
+            icon, "Mute"
 
     StackPanel.create
         [ StackPanel.verticalAlignment VerticalAlignment.Center
@@ -166,8 +172,26 @@ let private media state dispatch =
                 button Icons.stop allowStop (Some COLOUR_INACTIVE) None 0 "Stop track" (fun _ -> dispatch Stop)
                 button Icons.next allowNext (Some previousAndNextEnabledColourOverride) None 0 "Next track" (fun _ ->
                     dispatch Next)
-                button muteOrUnmuteIcon true (Some muteOrUnmuteColour) None 15 muteOrUnmuteTip (fun _ ->
-                    dispatch ToggleMuted) ] ]
+                button
+                    muteOrUnmuteIcon
+                    (state.Volume <> 0)
+                    (Some COLOUR_VOLUME)
+                    (Some COLOUR_VOLUME)
+                    20
+                    muteOrUnmuteTip
+                    (fun _ -> dispatch ToggleMuted)
+                Slider.create
+                    [ Slider.verticalAlignment VerticalAlignment.Center
+                      Slider.horizontalAlignment HorizontalAlignment.Center
+                      Slider.width 100.
+                      Slider.minimum 0.
+                      Slider.maximum 100.
+                      Slider.margin (8, 0, 0, 0)
+                      Slider.padding (0, 0, 0, 6)
+                      Slider.foreground COLOUR_VOLUME
+                      Slider.value state.Volume
+                      Slider.tip $"Volume: {state.Volume}%%"
+                      Slider.onValueChanged (fun value -> dispatch (Volume(value |> int))) ] ] ]
 
 let view state dispatch =
     StackPanel.create

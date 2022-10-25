@@ -32,6 +32,7 @@ type Msg =
     | Pause
     | Stop
     | ToggleMuted
+    | Volume of int
     | NotifyPlaying
     | NotifyPaused
     | NotifyStopped
@@ -42,8 +43,9 @@ type Msg =
 [<Literal>]
 let private DEBOUNCE_SEEK_REQUEST_DELAY = 250
 
-let init muted =
+let init muted volume =
     { Muted = muted
+      Volume = volume
       TrackState = None
       SeekRequests = [] }
 
@@ -240,6 +242,16 @@ let transition msg (state: State) (player: MediaPlayer) =
         let newMuted = not state.Muted
         player.Mute <- newMuted
         { state with Muted = newMuted }, Cmd.none, None
+    | Volume volume ->
+        let newMuted = volume = 0
+        player.Mute <- newMuted
+        player.Volume <- playerVolume volume
+
+        { state with
+            Muted = newMuted
+            Volume = volume },
+        Cmd.none,
+        None
     | NotifyPlaying ->
         match state.TrackState with
         | Some trackState ->
