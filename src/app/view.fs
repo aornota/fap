@@ -73,9 +73,9 @@ let private errors state dispatch =
                           Button.background COLOUR_BACKGROUND
                           Button.cornerRadius 0
                           Button.margin (10, 0, 0, 0)
-                          Button.content (Icons.clear true (Some COLOUR_INACTIVE) None)
-                          Button.tip "Clear error"
-                          Button.onClick (fun _ -> dispatch (ClearError errorId)) ]
+                          Button.content (Icons.remove true (Some COLOUR_INACTIVE) None)
+                          Button.tip "Remove error"
+                          Button.onClick (fun _ -> dispatch (RemoveError errorId)) ]
                     TextBlock.create
                         [ TextBlock.verticalAlignment VerticalAlignment.Center
                           TextBlock.textAlignment TextAlignment.Left

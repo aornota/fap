@@ -11,7 +11,7 @@ open Avalonia.FuncUI.DSL
 [<Literal>]
 let private SIZE_CANVAS = 24.
 
-let private create (data: string) enabled enabledColourOverride disabledColourOverride =
+let private create (pathData: string) enabled enabledColourOverride disabledColourOverride =
     let colour =
         match enabled, enabledColourOverride, disabledColourOverride with
         | true, Some enabledColourOverride, _ -> enabledColourOverride
@@ -22,7 +22,7 @@ let private create (data: string) enabled enabledColourOverride disabledColourOv
     Canvas.create
         [ Canvas.width SIZE_CANVAS
           Canvas.height SIZE_CANVAS
-          Canvas.children [ Path.create [ Path.fill colour; Path.data data ] ] ]
+          Canvas.children [ Path.create [ Path.fill colour; Path.data pathData ] ] ]
 
 // #region Player icons
 let previous = create "M6,18V6H8V18H6M9.5,12L18,6V18L9.5,12Z"
@@ -44,7 +44,15 @@ let unmuted =
 // #endregion
 
 // #region Miscellaneous icons
-let clear =
+let remove =
     create
         "M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M19,19H5V5H19V19M17,8.4L13.4,12L17,15.6L15.6,17L12,13.4L8.4,17L7,15.6L10.6,12L7,8.4L8.4,7L12,10.6L15.6,7L17,8.4Z"
+
+let left = create "M14,7L9,12L14,17V7Z"
+
+let right = create "M10,17L15,12L10,7V17Z"
+
+let up = create "M7,15L12,10L17,15H7Z"
+
+let down = create "M7,10L12,15L17,10H7Z"
 // #endregion

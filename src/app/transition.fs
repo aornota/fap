@@ -18,7 +18,7 @@ type Msg =
     | SetTitle of TrackData * playlistName: string
     | ToggleShowingErrors
     | AddError of string
-    | ClearError of ErrorId
+    | RemoveError of ErrorId
     | ClearAllErrors
     | OpenFiles
     | OpenFolder
@@ -93,7 +93,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         Cmd.batch [ Cmd.map PlaylistsMsg cmd; handlePlaylistsExternal external ]
     | ToggleShowingErrors -> { state with ShowingErrors = not state.ShowingErrors }, Cmd.none
     | AddError text -> { state with Errors = (ErrorId.Create(), DateTime.UtcNow, text) :: state.Errors }, Cmd.none
-    | ClearError errorId ->
+    | RemoveError errorId ->
         { state with
             Errors =
                 state.Errors
