@@ -4,6 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Aornota.Fap</RootNamespace>
+    <ApplicationIcon>assets\icons\fap-multi.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="literals.fs" />
@@ -26,7 +27,7 @@
     <Compile Include="app\view.fs" />
     <Compile Include="app\subscriptions.fs" />
     <Compile Include="app\program.fs" />
-    <AvaloniaResource Include="assets\icons\**" />
+    <AvaloniaResource Include="assets\images\**" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="0.10.17" />

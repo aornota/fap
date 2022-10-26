@@ -14,6 +14,7 @@ open Avalonia.Controls.ApplicationLifetimes
 open Avalonia.FuncUI.Elmish
 open Avalonia.FuncUI.Hosts
 open Avalonia.Input
+open Avalonia.Media.Imaging
 open Avalonia.Themes.Fluent
 open LibVLCSharp.Shared
 open System
@@ -23,6 +24,18 @@ type AppWindow(preferences: Preferences, preferencesErrors) as this =
 
     do
         base.Title <- APPLICATION_NAME
+
+        // TODO-NMB: Get icon via helper method (and PLayerStatus type, e.g. Active | Inactive | &c.)...
+        base.Icon <-
+            WindowIcon(
+                Bitmap.FromImageAsset(
+                    if preferences.Muted then
+                        "fap-inactive-muted.png"
+                    else
+                        "fap-inactive.png"
+                )
+            )
+
         base.MinWidth <- MIN_WIDTH
         base.MinHeight <- MIN_HEIGHT
         base.Width <- Math.Max(fst preferences.NormalSize, MIN_WIDTH)

@@ -38,7 +38,7 @@ let private menuBar state dispatch =
                                 [ MenuItem.header $"Errors ({state.Errors.Length})"
                                   MenuItem.fontSize 12.
                                   MenuItem.foreground COLOUR_ERROR
-                                  // If want an "icon"...MenuItem.icon (Image.FromString "avares://fap/assets/icons/select-files.png")
+                                  // If want an "icon"...MenuItem.icon (Image.FromImageAsset "select-files.png")
                                   MenuItem.viewItems
                                       [ MenuItem.create
                                             [ MenuItem.header showOrHideErrorsText

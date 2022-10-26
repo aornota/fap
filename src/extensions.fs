@@ -7,24 +7,22 @@ open Avalonia.Media.Imaging
 open Avalonia.Platform
 open System
 
+[<Literal>]
+let private ASSETS_IMAGES = "avares://fap/assets/images/"
+
 type Bitmap with
 
-    static member Create(s: string) : Bitmap =
-        let uri =
-            if s.StartsWith("/") then
-                Uri(s, UriKind.Relative)
-            else
-                Uri(s, UriKind.RelativeOrAbsolute)
-
-        if uri.IsAbsoluteUri && uri.IsFile then
-            new Bitmap(uri.LocalPath)
-        else
-            let assets = AvaloniaLocator.Current.GetService<IAssetLoader>()
-            new Bitmap(assets.Open(uri))
+    static member FromImageAsset(name: string) : IBitmap =
+        new Bitmap(
+            AvaloniaLocator
+                .Current
+                .GetService<IAssetLoader>()
+                .Open(Uri($"{ASSETS_IMAGES}{name}", UriKind.RelativeOrAbsolute))
+        )
 
 type Image with
 
-    static member FromString(s: string) : Image =
+    static member FromImageAsset(name) : Image =
         let img = Image()
-        img.Source <- Bitmap.Create s
+        img.Source <- Bitmap.FromImageAsset name
         img
