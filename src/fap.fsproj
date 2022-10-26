@@ -1,44 +1,42 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
-    <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <TargetFramework>net6.0</TargetFramework>
-        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <RootNamespace>Aornota.Fap</RootNamespace>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <Compile Include="literals.fs" />
-        <Compile Include="utilities.fs" />
-        <Compile Include="domain.fs" />
-        <Compile Include="dialogs.fs" />
-        <Compile Include="extensions.fs" />
-        <Compile Include="icons.fs" />
-        <Compile Include="playlists\model.fs" />
-        <Compile Include="playlists\temp.fs" />
-        <Compile Include="playlists\transition.fs" />
-        <Compile Include="playlists\view.fs" />
-        <Compile Include="player\utilities.fs" />
-        <Compile Include="player\model.fs" />
-        <Compile Include="player\transition.fs" />
-        <Compile Include="player\view.fs" />
-        <Compile Include="app\model.fs" />
-        <Compile Include="app\transition.fs" />
-        <Compile Include="app\view.fs" />
-        <Compile Include="app\subscriptions.fs" />
-        <Compile Include="app\program.fs" />
-        <AvaloniaResource Include="assets\icons\**" />
-    </ItemGroup>
-
-    <ItemGroup>
-		<PackageReference Include="Avalonia.Desktop" Version="0.10.17" />
-        <PackageReference Include="Avalonia.Diagnostics" Version="0.10.17" />
-        <PackageReference Include="JaggerJo.Avalonia.FuncUI" Version="0.5.3" />
-        <PackageReference Include="JaggerJo.Avalonia.FuncUI.DSL" Version="0.5.3" />
-        <PackageReference Include="JaggerJo.Avalonia.FuncUI.Elmish" Version="0.5.3" />
-		<PackageReference Include="LibVLCSharp" Version="3.6.6" />
-		<PackageReference Include="TagLibSharp" Version="2.3.0" />
-		<PackageReference Include="Thoth.Json.Net" Version="8.0.0" />
-        <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.17.4" />
-    </ItemGroup>
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Aornota.Fap</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="literals.fs" />
+    <Compile Include="persistence.fs" />
+    <Compile Include="utilities.fs" />
+    <Compile Include="domain.fs" />
+    <Compile Include="dialogs.fs" />
+    <Compile Include="extensions.fs" />
+    <Compile Include="icons.fs" />
+    <Compile Include="playlists\model.fs" />
+    <Compile Include="playlists\temp.fs" />
+    <Compile Include="playlists\transition.fs" />
+    <Compile Include="playlists\view.fs" />
+    <Compile Include="player\utilities.fs" />
+    <Compile Include="player\model.fs" />
+    <Compile Include="player\transition.fs" />
+    <Compile Include="player\view.fs" />
+    <Compile Include="app\model.fs" />
+    <Compile Include="app\transition.fs" />
+    <Compile Include="app\view.fs" />
+    <Compile Include="app\subscriptions.fs" />
+    <Compile Include="app\program.fs" />
+    <AvaloniaResource Include="assets\icons\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="0.10.17" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="0.10.17" />
+    <PackageReference Include="JaggerJo.Avalonia.FuncUI" Version="0.5.3" />
+    <PackageReference Include="JaggerJo.Avalonia.FuncUI.DSL" Version="0.5.3" />
+    <PackageReference Include="JaggerJo.Avalonia.FuncUI.Elmish" Version="0.5.3" />
+    <PackageReference Include="LibVLCSharp" Version="3.6.6" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+    <PackageReference Include="Thoth.Json.Net" Version="8.0.0" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.17.4" />
+  </ItemGroup>
 </Project>

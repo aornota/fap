@@ -32,7 +32,24 @@ let COLOUR_DISABLED_ICON = "black"
 let COLOUR_DISABLED_TEXT = "gray"
 // #endregion
 
+// #region Folders
+[<Literal>]
+let FOLDER_SESSIONS = "sessions"
+
+[<Literal>]
+let FOLDER_PLAYLIST = "playlists"
+// #endregion
+
 // #region File extensions
+[<Literal>]
+let FILE_EXTENSION_PREFERENCES = "fapper"
+
+[<Literal>]
+let FILE_EXTENSION_SESSION = "faps"
+
+[<Literal>]
+let FILE_EXTENSION_PLAYLIST = "fappy"
+
 [<Literal>]
 let FILE_EXTENSION_FLAC = "flac"
 

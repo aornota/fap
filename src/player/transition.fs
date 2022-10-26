@@ -18,7 +18,7 @@ type ExternalMsg =
     | NotifyEnded of trackId: TrackId
     | NotifyPlaybackErrored of trackId: TrackId
     | NotifyError of string
-// TODO-NMB: Save preferences (muted / volume / &c.)?...
+    | SavePreferences
 
 type Msg =
     | TrackSelected of track: TrackData * playlistName: string * hasPrevious: bool * hasNext: bool
@@ -172,7 +172,7 @@ let transition msg (state: State) (player: MediaPlayer) =
 
                     { state with
                         TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
-                        SeekRequests = newSeekRequests },
+                        SeekRequests = [] },
                     Cmd.none,
                     None
             | _ -> notifyError "DebounceSeekRequest when trackState.PlayerState not Playing"
@@ -241,17 +241,20 @@ let transition msg (state: State) (player: MediaPlayer) =
     | ToggleMuted ->
         let newMuted = not state.Muted
         player.Mute <- newMuted
-        { state with Muted = newMuted }, Cmd.none, None
+        { state with Muted = newMuted }, Cmd.none, Some SavePreferences
     | Volume volume ->
-        let newMuted = volume = 0
-        player.Mute <- newMuted
-        player.Volume <- playerVolume volume
+        if volume <> state.Volume then
+            let newMuted = volume = 0
+            player.Mute <- newMuted
+            player.Volume <- playerVolume volume
 
-        { state with
-            Muted = newMuted
-            Volume = volume },
-        Cmd.none,
-        None
+            { state with
+                Muted = newMuted
+                Volume = volume },
+            Cmd.none,
+            Some SavePreferences
+        else
+            noChange
     | NotifyPlaying ->
         match state.TrackState with
         | Some trackState ->

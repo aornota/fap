@@ -165,12 +165,12 @@ let private media state dispatch =
                     (fun _ -> dispatch Previous)
 
                 if allowPause then
-                    button Icons.pause true (Some COLOUR_AWAITING) None 0 "Pause track" (fun _ -> dispatch Pause)
+                    button Icons.pause true (Some COLOUR_AWAITING) None 6 "Pause track" (fun _ -> dispatch Pause)
                 else
-                    button Icons.play allowPlay None playDisabledColourOverride 0 "Play track" (fun _ -> dispatch Play)
+                    button Icons.play allowPlay None playDisabledColourOverride 6 "Play track" (fun _ -> dispatch Play)
 
                 button Icons.stop allowStop (Some COLOUR_INACTIVE) None 0 "Stop track" (fun _ -> dispatch Stop)
-                button Icons.next allowNext (Some previousAndNextEnabledColourOverride) None 0 "Next track" (fun _ ->
+                button Icons.next allowNext (Some previousAndNextEnabledColourOverride) None 6 "Next track" (fun _ ->
                     dispatch Next)
                 button
                     muteOrUnmuteIcon

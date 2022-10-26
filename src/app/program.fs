@@ -1,9 +1,11 @@
 module Aornota.Fap.App.Program
 
 open Aornota.Fap
+open Aornota.Fap.App.Model
 open Aornota.Fap.App.Transition
 open Aornota.Fap.App.View
 open Aornota.Fap.Literals
+open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Elmish
 open Avalonia
@@ -14,28 +16,30 @@ open Avalonia.FuncUI.Hosts
 open Avalonia.Input
 open Avalonia.Themes.Fluent
 open LibVLCSharp.Shared
+open System
 
-type AppWindow() as this =
+type AppWindow(preferences: Preferences, preferencesErrors) as this =
     inherit HostWindow()
 
     do
         base.Title <- APPLICATION_NAME
-        base.Width <- 800.0
-        base.Height <- 600.0
-        base.MinWidth <- 800.0
-        base.MinHeight <- 600.0
+        base.MinWidth <- MIN_WIDTH
+        base.MinHeight <- MIN_HEIGHT
+        base.Width <- Math.Max(fst preferences.NormalSize, MIN_WIDTH)
+        base.Height <- Math.Max(snd preferences.NormalSize, MIN_HEIGHT)
+        base.Position <- PixelPoint(fst preferences.NormalLocation, snd preferences.NormalLocation)
+        base.WindowState <- preferences.WindowState
         this.SystemDecorations <- SystemDecorations.Full
 
-        //?this.VisualRoot.VisualRoot.Renderer.DrawFps <- true
-        //?this.VisualRoot.VisualRoot.Renderer.DrawDirtyRects <- true
-
-        // TODO-NMB: Get from preferences?...
-        let muted, volume = false, 100
+        // this.VisualRoot.VisualRoot.Renderer.DrawFps <- true
+        // this.VisualRoot.VisualRoot.Renderer.DrawDirtyRects <- true
 
         let player = Player.Utilities.getEmptyPlayer
-        player.Mute <- muted
-        player.Volume <- playerVolume volume
-        let init _ = init muted volume, Cmd.none
+        player.Mute <- preferences.Muted
+        player.Volume <- playerVolume preferences.Volume
+
+        let init _ =
+            init preferences preferencesErrors, Cmd.none
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif
@@ -43,6 +47,8 @@ type AppWindow() as this =
 
         Program.mkProgram init updateWithServices view
         |> Program.withHost this
+        |> Program.withSubscription (fun _ -> Subscriptions.locationChanged this)
+        |> Program.withSubscription (fun _ -> Subscriptions.effectiveViewportChanged this)
         |> Program.withSubscription (fun _ -> Subscriptions.playing player)
         |> Program.withSubscription (fun _ -> Subscriptions.paused player)
         |> Program.withSubscription (fun _ -> Subscriptions.stopped player)
@@ -63,10 +69,23 @@ type App() =
 
     override this.OnFrameworkInitializationCompleted() =
         match this.ApplicationLifetime with
-        | :? IClassicDesktopStyleApplicationLifetime as desktopLifetime -> desktopLifetime.MainWindow <- AppWindow()
+        | :? IClassicDesktopStyleApplicationLifetime as desktopLifetime ->
+            let writeDefaultPreferences defaultPreferences =
+                match writePreferences defaultPreferences |> Async.RunSynchronously with
+                | Ok _ -> []
+                | Error error -> [ $"Program.writeDefaultPreferences -> {error}" ]
+
+            let preferences, preferencesErrors =
+                match readPreferences () |> Async.RunSynchronously with
+                | Ok preferences -> preferences, []
+                | Error FileNotFound -> defaultPreferences, writeDefaultPreferences defaultPreferences
+                | Error (Other error) -> defaultPreferences, writeDefaultPreferences defaultPreferences @ [ error ]
+
+            desktopLifetime.MainWindow <- AppWindow(preferences, preferencesErrors)
         | _ -> ()
 
 [<EntryPoint>]
+// TODO-NMB: How to make use of args?...
 let main (args: string[]) =
     AppBuilder
         .Configure<App>()
