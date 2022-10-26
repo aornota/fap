@@ -1,7 +1,8 @@
 module Aornota.Fap.Literals
 
+// (pre-α) | *α* | β | γ | δ | ε | ζ | η | θ | ι | κ | λ | μ | ν | ξ | ο | π | ρ) | σ | τ | υ | φ | χ | ψ | ω
 [<Literal>]
-let APPLICATION_NAME = "fap"
+let APPLICATION_NAME = "fap (α)" // note: also update ..\README.md
 
 // #region Colours
 [<Literal>]

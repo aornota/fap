@@ -1,4 +1,4 @@
-﻿# fap
+﻿# ![fap](https://raw.githubusercontent.com/aornota/fap/master/src/assets/images/fap-multi.png) | fap (α)
 
 F# audio player using [Avalonia.FuncUI](https://github.com/fsprojects/Avalonia.FuncUI).
 
