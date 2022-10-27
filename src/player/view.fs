@@ -116,10 +116,10 @@ let private media state dispatch =
               Button.background COLOUR_BACKGROUND
               Button.margin (leftMargin, 0, 0, 0)
               Button.cornerRadius 0
-              Button.isEnabled enabled
               Button.content (fIcon enabled enabledColourOverride disabledColourOverride)
-              Button.tip tip
-              Button.onClick onClick ]
+              if enabled then
+                  Button.tip tip
+              Button.onClick (if enabled then onClick else ignore) ]
 
     let isPlayingOrAwaitingPlay, allowPrevious, allowNext, allowPlay, playDisabledColourOverride, allowPause, allowStop =
         match state.TrackState with

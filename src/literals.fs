@@ -3,37 +3,37 @@ module Aornota.Fap.Literals
 [<Literal>]
 let APPLICATION_NAME = "fap"
 
-// (pre-α) | *α* | β | γ | δ | ε | ζ | η | θ | ι | κ | λ | μ | ν | ξ | ο | π | ρ) | σ | τ | υ | φ | χ | ψ | ω
+// (pre-α | α) | *β* | γ | δ | ε | ζ | η | θ | ι | κ | λ | μ | ν | ξ | ο | π | ρ) | σ | τ | υ | φ | χ | ψ | ω
 [<Literal>]
-let APPLICATION_VERSION = "α" // note: also update ..\README.md
+let APPLICATION_VERSION = "β" // note: also update ..\README.md
 
 // #region Colours
 [<Literal>]
-let COLOUR_ACTIVE = "cyan"
+let COLOUR_ACTIVE = "#00Ffff" // cyan
 
 [<Literal>]
-let COLOUR_INACTIVE = "white"
+let COLOUR_INACTIVE = "#ffffff" // white
 
 [<Literal>]
-let COLOUR_AWAITING = "yellow"
+let COLOUR_AWAITING = "#ffff00" // yellow
 
 [<Literal>]
-let COLOUR_BACKGROUND = "black"
+let COLOUR_BACKGROUND = "#000000" // black
 
 [<Literal>]
-let COLOUR_VOLUME = "violet"
+let COLOUR_VOLUME = "#ee82ee" // violet
 
 [<Literal>]
-let COLOUR_ERROR = "tomato"
+let COLOUR_ERROR = "#ff6347" // tomato
 
 [<Literal>]
-let COLOUR_DEBUG = "plum"
+let COLOUR_DEBUG = "#dda0dd" // plum
 
 [<Literal>]
-let COLOUR_DISABLED_ICON = "black"
+let COLOUR_DISABLED_ICON = "#404040"
 
 [<Literal>]
-let COLOUR_DISABLED_TEXT = "silver"
+let COLOUR_DISABLED_TEXT = "#c0c0c0" // silver
 // #endregion
 
 // #region Folders
