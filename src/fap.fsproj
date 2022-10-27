@@ -4,7 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Aornota.Fap</RootNamespace>
-    <ApplicationIcon>assets\icons\fap-multi.ico</ApplicationIcon>
+    <ApplicationIcon>assets\resources\fap-multi.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="literals.fs" />

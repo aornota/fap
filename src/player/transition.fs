@@ -16,9 +16,10 @@ type ExternalMsg =
     | NotifyPaused of trackId: TrackId
     | NotifyStopped of trackId: TrackId
     | NotifyEnded of trackId: TrackId
-    | NotifyPlaybackErrored of trackId: TrackId
+    | NotifyErrored of trackId: TrackId
     | NotifyError of string
-    | SavePreferences
+    | NotifyMutedToggled
+    | NotifyVolumeChanged
 
 type Msg =
     | TrackSelected of track: TrackData * playlistName: string * hasPrevious: bool * hasNext: bool
@@ -38,7 +39,7 @@ type Msg =
     | NotifyStopped
     | NotifyEnded
     | NotifyPositionChanged of float32
-    | NotifyPlaybackErrored
+    | NotifyErrored
 
 [<Literal>]
 let private DEBOUNCE_SEEK_REQUEST_DELAY = 250
@@ -241,7 +242,7 @@ let transition msg (state: State) (player: MediaPlayer) =
     | ToggleMuted ->
         let newMuted = not state.Muted
         player.Mute <- newMuted
-        { state with Muted = newMuted }, Cmd.none, Some SavePreferences
+        { state with Muted = newMuted }, Cmd.none, Some NotifyMutedToggled
     | Volume volume ->
         if volume <> state.Volume then
             let newMuted = volume = 0
@@ -252,7 +253,7 @@ let transition msg (state: State) (player: MediaPlayer) =
                 Muted = newMuted
                 Volume = volume },
             Cmd.none,
-            Some SavePreferences
+            Some NotifyVolumeChanged
         else
             noChange
     | NotifyPlaying ->
@@ -317,13 +318,13 @@ let transition msg (state: State) (player: MediaPlayer) =
                 None
             | _ -> notifyError "NotifyTimeChanged when trackState.PlayerState not Playing"
         | None -> notifyError "NotifyTimeChanged when trackState is None"
-    | NotifyPlaybackErrored ->
+    | NotifyErrored ->
         match state.TrackState with
         | Some trackState ->
             match trackState.PlayerState with
             | AwaitingPlay _ ->
                 { state with TrackState = Some { trackState with PlayerState = PlaybackErrored } },
                 Cmd.none,
-                Some(ExternalMsg.NotifyPlaybackErrored trackState.Track.Id)
-            | _ -> notifyError "NotifyPlaybackErrored when trackState.PlayerState not AwaitingPlay"
-        | None -> notifyError "NotifyPlaybackErrored when trackState is None"
+                Some(ExternalMsg.NotifyErrored trackState.Track.Id)
+            | _ -> notifyError "NotifyErrored when trackState.PlayerState not AwaitingPlay"
+        | None -> notifyError "NotifyErrored when trackState is None"

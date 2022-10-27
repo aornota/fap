@@ -23,19 +23,9 @@ type AppWindow(preferences: Preferences, preferencesErrors) as this =
     inherit HostWindow()
 
     do
-        base.Title <- APPLICATION_NAME
+        base.Title <- applicationNameAndVersion
 
-        // TODO-NMB: Get icon via helper method (and PLayerStatus type, e.g. Active | Inactive | &c.)...
-        base.Icon <-
-            WindowIcon(
-                Bitmap.FromImageAsset(
-                    if preferences.Muted then
-                        "fap-inactive-muted.png"
-                    else
-                        "fap-inactive.png"
-                )
-            )
-
+        base.Icon <- applicationIcon Inactive preferences.Muted
         base.MinWidth <- MIN_WIDTH
         base.MinHeight <- MIN_HEIGHT
         base.Width <- Math.Max(fst preferences.NormalSize, MIN_WIDTH)
