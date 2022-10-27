@@ -17,15 +17,16 @@ type Msg =
     | AddError of string
     | RemoveError of ErrorId
     | ClearAllErrors
-    (* | OpenFiles
-    | OpenFolder
-    | AfterSelectFolder of string
-    | AfterSelectFiles of string array *)
     | SavePreferencesApp
     | SavePreferencesPlayer
     | DebounceSavePreferencesAppRequest of SavePreferencesRequestId
     | DebounceSavePreferencesPlayerRequest of SavePreferencesRequestId
     | NoOp
+    (* | OpenFiles
+    | OpenFolder
+    | AfterSelectFolder of string
+    | AfterSelectFiles of string array *)
+    | PlaylistsMsg of Playlists.Transition.Msg
     | PlayerMsg of Player.Transition.Msg
     | PlayerPlaying
     | PlayerPaused
@@ -33,22 +34,30 @@ type Msg =
     | PlayerEnded
     | PlayerPositionChanged of float32
     | PlayerErrored
-    | PlaylistsMsg of Playlists.Transition.Msg
 
 [<Literal>]
 let private DEBOUNCE_SAVE_PREFERENCES_REQUEST_DELAY = 250
 
-let private makeError text = ErrorId.Create(), DateTime.UtcNow, text
+let private makeError error =
+    ErrorId.Create(), DateTime.UtcNow, error
 
 let private handlePlaylistsExternal msg =
     match msg with
     | None -> Cmd.none
     | Some msg ->
         match msg with
-        | Playlists.Transition.ExternalMsg.RequestPlay (trackData, playlistName, hasPrevious, hasNext) ->
+        | Playlists.Transition.ExternalMsg.RequestTrack (trackData, playlistName, hasPrevious, hasNext, play) ->
             Cmd.batch
                 [ Cmd.ofMsg (
-                      PlayerMsg(Player.Transition.Msg.PlayRequested(trackData, playlistName, hasPrevious, hasNext))
+                      PlayerMsg(
+                          Player.Transition.Msg.NotifyTrackRequested(
+                              trackData,
+                              playlistName,
+                              hasPrevious,
+                              hasNext,
+                              play
+                          )
+                      )
                   )
                   Cmd.ofMsg (UpdateTitle(trackData, playlistName)) ]
         | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
@@ -59,26 +68,29 @@ let private handlePlayerExternal msg =
     | Some msg ->
         match msg with
         | Player.Transition.ExternalMsg.RequestPrevious (trackId, play) ->
-            // TODO-NMB: Send message to Playlists...
-            Cmd.none
+            Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyRequestPrevious(trackId, play)))
         | Player.Transition.ExternalMsg.RequestNext (trackId, play) ->
-            // TODO-NMB: Send message to Playlists...
-            Cmd.none
-        | Player.Transition.ExternalMsg.NotifyPlaying (trackID, duration) ->
-            // TODO-NMB: Send message to Playlists...
-            Cmd.batch [ Cmd.ofMsg UpdateIcon ]
-        | Player.Transition.ExternalMsg.NotifyPaused trackID ->
-            // TODO-NMB: Send message to Playlists...
-            Cmd.batch [ Cmd.ofMsg UpdateIcon ]
-        | Player.Transition.ExternalMsg.NotifyStopped trackID ->
-            // TODO-NMB: Send message to Playlists...
-            Cmd.batch [ Cmd.ofMsg UpdateIcon ]
-        | Player.Transition.ExternalMsg.NotifyEnded trackID ->
-            // TODO-NMB: Send message to Playlists...
-            Cmd.batch [ Cmd.ofMsg UpdateIcon ]
-        | Player.Transition.ExternalMsg.NotifyErrored trackID ->
-            // TODO-NMB: Send message to Playlists...
-            Cmd.batch [ Cmd.ofMsg UpdateIcon ]
+            Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyRequestNext(trackId, play)))
+        | Player.Transition.ExternalMsg.NotifyPlaying (trackId, duration) ->
+            Cmd.batch
+                [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyPlaying(trackId, duration)))
+                  Cmd.ofMsg UpdateIcon ]
+        | Player.Transition.ExternalMsg.NotifyPaused trackId ->
+            Cmd.batch
+                [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyPaused trackId))
+                  Cmd.ofMsg UpdateIcon ]
+        | Player.Transition.ExternalMsg.NotifyStopped trackId ->
+            Cmd.batch
+                [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyStopped trackId))
+                  Cmd.ofMsg UpdateIcon ]
+        | Player.Transition.ExternalMsg.NotifyEnded trackId ->
+            Cmd.batch
+                [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyEnded trackId))
+                  Cmd.ofMsg UpdateIcon ]
+        | Player.Transition.ExternalMsg.NotifyPlaybackErrored trackId ->
+            Cmd.batch
+                [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyPlaybackErrored trackId))
+                  Cmd.ofMsg UpdateIcon ]
         | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
         | Player.Transition.ExternalMsg.NotifyMutedToggled ->
             Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg SavePreferencesPlayer ]
@@ -87,6 +99,11 @@ let private handlePlayerExternal msg =
 let init preferences preferencesErrors =
     let errors = preferencesErrors |> List.map makeError
 
+    let playlistsState, playlistsExternalMsg =
+        Playlists.Transition.init Playlists.Temp.testPlaylists
+
+    let playerState = Player.Transition.init preferences.Muted preferences.Volume
+
     { ShowingErrors = isDebug && errors.Length > 0
       Errors = errors
       LastNormalSize = preferences.NormalSize
@@ -94,8 +111,9 @@ let init preferences preferencesErrors =
       LastWindowState = preferences.WindowState
       SavePreferencesAppRequestIds = []
       SavePreferencesPlayerRequestIds = []
-      PlayerState = Player.Transition.init preferences.Muted preferences.Volume
-      PlaylistsState = Playlists.Transition.init }
+      PlaylistsState = playlistsState
+      PlayerState = playerState },
+    handlePlaylistsExternal playlistsExternalMsg
 
 let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     let preferences () =
@@ -141,7 +159,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         window.Icon <- applicationIcon playerStatus state.PlayerState.Muted
         noChange
     | ToggleShowingErrors -> { state with ShowingErrors = not state.ShowingErrors }, Cmd.none
-    | AddError text -> { state with Errors = makeError text :: state.Errors }, Cmd.none
+    | AddError error -> { state with Errors = makeError error :: state.Errors }, Cmd.none
     | RemoveError errorId ->
         { state with
             Errors =
@@ -149,26 +167,6 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 |> List.filter (fun (otherErrorId, _, _) -> otherErrorId <> errorId) },
         Cmd.none
     | ClearAllErrors -> { state with Errors = [] }, Cmd.none
-    (* | OpenFiles ->
-        let dialog = Dialogs.getFilesDialog None
-
-        let showDialog window =
-            dialog.ShowAsync(window) |> Async.AwaitTask
-
-        state, Cmd.OfAsync.perform showDialog window AfterSelectFiles
-    | OpenFolder ->
-        let dialog = Dialogs.getFolderDialog ()
-
-        let showDialog window =
-            dialog.ShowAsync(window) |> Async.AwaitTask
-
-        state, Cmd.OfAsync.perform showDialog window AfterSelectFolder
-    | AfterSelectFolder path ->
-        let songs = populateFromDirectory path |> Array.toList
-        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs))
-    | AfterSelectFiles paths ->
-        let songs = populateSongs paths |> Array.toList
-        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs)) *)
     | SavePreferencesApp ->
         let savePreferencesRequestId = SavePreferencesRequestId.Create()
 
@@ -235,6 +233,32 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 SavePreferencesPlayerRequestIds = [] },
             Cmd.OfAsync.perform writePreferences preferences handleWritePreferencesResult
     | NoOp -> noChange
+    (* | OpenFiles ->
+        let dialog = Dialogs.getFilesDialog None
+
+        let showDialog window =
+            dialog.ShowAsync(window) |> Async.AwaitTask
+
+        state, Cmd.OfAsync.perform showDialog window AfterSelectFiles
+    | OpenFolder ->
+        let dialog = Dialogs.getFolderDialog ()
+
+        let showDialog window =
+            dialog.ShowAsync(window) |> Async.AwaitTask
+
+        state, Cmd.OfAsync.perform showDialog window AfterSelectFolder
+    | AfterSelectFolder path ->
+        let songs = populateFromDirectory path |> Array.toList
+        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs))
+    | AfterSelectFiles paths ->
+        let songs = populateSongs paths |> Array.toList
+        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs)) *)
+    | PlaylistsMsg playlistsMsg ->
+        let newPlaylistState, cmd, external =
+            Playlists.Transition.transition playlistsMsg state.PlaylistsState
+
+        { state with PlaylistsState = newPlaylistState },
+        Cmd.batch [ Cmd.map PlaylistsMsg cmd; handlePlaylistsExternal external ]
     | PlayerMsg playerMsg ->
         let newPlayerState, cmd, external =
             Player.Transition.transition playerMsg state.PlayerState player
@@ -246,10 +270,4 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     | PlayerEnded -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyEnded)
     | PlayerPositionChanged position ->
         state, Cmd.map PlayerMsg (Cmd.ofMsg (Player.Transition.Msg.NotifyPositionChanged position))
-    | PlayerErrored -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyErrored)
-    | PlaylistsMsg playlistsMsg ->
-        let newPlaylistState, cmd, external =
-            Playlists.Transition.transition playlistsMsg state.PlaylistsState
-
-        { state with PlaylistsState = newPlaylistState },
-        Cmd.batch [ Cmd.map PlaylistsMsg cmd; handlePlaylistsExternal external ]
+    | PlayerErrored -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyPlaybackErrored)

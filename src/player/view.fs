@@ -64,13 +64,18 @@ let private progressBar state dispatch =
               Slider.tip "Seek within track"
               Slider.onValueChanged (fun value -> dispatch (Seek(value / 100. |> float32))) ]
 
+    let durationColour =
+        match duration with
+        | Some _ -> colour
+        | None -> COLOUR_DISABLED_TEXT
+
     let duration =
         TextBlock.create
             [ TextBlock.verticalAlignment VerticalAlignment.Center
               TextBlock.textAlignment TextAlignment.Left
               TextBlock.width 40.
               TextBlock.fontSize 12.
-              TextBlock.foreground colour
+              TextBlock.foreground durationColour
               TextBlock.text (durationText RoundUp duration) ]
 
     StackPanel.create
@@ -120,7 +125,7 @@ let private media state dispatch =
         match state.TrackState with
         | Some trackState ->
             match trackState.PlayerState with
-            | NoMedia -> false, trackState.HasPrevious, trackState.HasNext, false, None, false, false
+            | NoMedia -> false, trackState.HasPrevious, trackState.HasNext, true, None, false, false
             | AwaitingPlay _ ->
                 true, trackState.HasPrevious, trackState.HasNext, false, Some COLOUR_AWAITING, false, false
             | PlaybackErrored ->

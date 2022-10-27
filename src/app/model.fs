@@ -1,6 +1,7 @@
 module Aornota.Fap.App.Model
 
 open Aornota.Fap
+open Aornota.Fap.Domain
 open Aornota.Fap.Literals
 open Aornota.Fap.Persistence
 open Avalonia.Controls
@@ -34,14 +35,8 @@ type State =
       LastWindowState: WindowState
       SavePreferencesAppRequestIds: SavePreferencesRequestId list
       SavePreferencesPlayerRequestIds: SavePreferencesRequestId list
-      PlayerState: Player.Model.State
-      PlaylistsState: Playlists.Model.State }
-
-type PlayerStatus =
-    | Active
-    | Awaiting
-    | Inactive
-    | Errored
+      PlaylistsState: Playlists.Model.State
+      PlayerState: Player.Model.State }
 
 [<Literal>]
 let MIN_WIDTH = 800.

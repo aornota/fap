@@ -4,7 +4,7 @@ open Aornota.Fap
 open Aornota.Fap.App.Model
 open Aornota.Fap.App.Transition
 open Aornota.Fap.App.View
-open Aornota.Fap.Literals
+open Aornota.Fap.Domain
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Elmish
@@ -41,8 +41,7 @@ type AppWindow(preferences: Preferences, preferencesErrors) as this =
         player.Mute <- preferences.Muted
         player.Volume <- playerVolume preferences.Volume
 
-        let init _ =
-            init preferences preferencesErrors, Cmd.none
+        let init _ = init preferences preferencesErrors
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif

@@ -52,7 +52,7 @@ let private menuBar state dispatch =
                                               MenuItem.isEnabled (state.Errors.Length > 0)
                                               MenuItem.onClick (fun _ -> dispatch ClearAllErrors) ] ] ] ] ] ] ]
 
-let private errors state dispatch =
+let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
     let errorTemplate (errorId, timestamp: DateTime, message) =
         DockPanel.create
             [ DockPanel.verticalAlignment VerticalAlignment.Stretch
@@ -73,7 +73,7 @@ let private errors state dispatch =
                           Button.background COLOUR_BACKGROUND
                           Button.cornerRadius 0
                           Button.margin (10, 0, 0, 0)
-                          Button.content (Icons.remove true (Some COLOUR_INACTIVE) None)
+                          Button.content (Icons.remove true (Some COLOUR_DISABLED_TEXT) None)
                           Button.tip "Remove error"
                           Button.onClick (fun _ -> dispatch (RemoveError errorId)) ]
                     TextBlock.create
@@ -83,14 +83,14 @@ let private errors state dispatch =
                           TextBlock.foreground COLOUR_ERROR
                           TextBlock.text message ] ] ]
 
-    if state.Errors.Length > 0 then
+    if errors.Length > 0 then
         ListBox.create
             [ ListBox.dock Dock.Top
               ListBox.maxHeight 154.
               ListBox.background COLOUR_BACKGROUND
-              ListBox.dataItems state.Errors
+              ListBox.dataItems errors
               ListBox.itemTemplate (
-                  DataTemplateView<(ErrorId * DateTime * string)>.create (fun error -> errorTemplate error)
+                  DataTemplateView<ErrorId * DateTime * string>.create (fun error -> errorTemplate error)
               ) ]
         :> IView
     else
@@ -108,11 +108,11 @@ let view state dispatch =
     DockPanel.create
         [ DockPanel.verticalAlignment VerticalAlignment.Stretch
           DockPanel.horizontalAlignment HorizontalAlignment.Stretch
-          DockPanel.lastChildFill true
+          DockPanel.lastChildFill (state.PlaylistsState.Playlists.Length > 0)
           DockPanel.children
               [ if isDebug then
                     menuBar state dispatch
                 if isDebug && state.ShowingErrors then
-                    errors state dispatch
+                    errorsView state.Errors dispatch
                 Player.View.view state.PlayerState (PlayerMsg >> dispatch)
                 Playlists.View.view state.PlaylistsState (PlaylistsMsg >> dispatch) ] ]

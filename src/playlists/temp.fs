@@ -3,17 +3,14 @@ module Aornota.Fap.Playlists.Temp
 open Aornota.Fap.Domain
 open Aornota.Fap.Playlists.Model
 
-let testState =
+let testPlaylists =
     let trackData folder name =
         { Id = TrackId.Create()
           Folder = folder
           Name = name
           Duration = None }
 
-    let items (head: TrackData, tail: TrackData list) =
-        NonEmptyList<Item>.Create (Track head, tail |> List.map (fun trackData -> Track trackData))
-
-    let playlist1 =
+    let wip =
         let folder = @"D:\AUDIO\_MIXES\_wip-b\candidates"
 
         let track1 =
@@ -30,20 +27,27 @@ let testState =
         let track8 = trackData folder "051 ^ ian william craig - stories.wav"
 
         let track9 =
-            trackData folder "ERROR -> 051-056 ^ jean-philippe rameau (natacha kudritskaya) - les soupirs.wav"
+            trackData folder "051-056 ^ jean-philippe rameau (natacha kudritskaya) - les soupirs.wav"
+        // TEMP-NMB...trackData folder "*SHOULD ERROR* -> 051-056 ^ jean-philippe rameau (natacha kudritskaya) - les soupirs.wav"
 
         let track10 = trackData folder "056 ^ midori takada - kannon-daiji.wav"
 
         { Id = PlaylistId.Create()
-          Name = Some "wip (mellow)"
-          ItemsState =
-            Items(
-                items (track1, [ track2; track3; track4; track5; track6; track7; track8; track9; track10 ]),
-                track3.Id,
-                None
-            ) }
+          Name = "wip (mellow)"
+          Items =
+            [ track1
+              track2
+              track3
+              track4
+              track5
+              track6
+              track7
+              track8
+              track9
+              track10 ]
+            |> List.map Track }
 
-    let playlist2 =
+    let nwa3 =
         let folder = @"D:\AUDIO\_MIXES\- now we are 03 -"
 
         let track1 =
@@ -69,32 +73,26 @@ let testState =
         let track16 = trackData folder "16. msylma - li-kul-i murad-in hijaa.wav"
 
         { Id = PlaylistId.Create()
-          Name = Some "now we are 03"
-          ItemsState =
-            Items(
-                items (
-                    track1,
-                    [ track2
-                      track3
-                      track4
-                      track5
-                      track6
-                      track7
-                      track8
-                      track9
-                      track10
-                      track11
-                      track12
-                      track13
-                      track14
-                      track15
-                      track16 ]
-                ),
-                track7.Id,
-                None
-            ) }
+          Name = "now we are 03"
+          Items =
+            [ track1
+              track2
+              track3
+              track4
+              track5
+              track6
+              track7
+              track8
+              track9
+              track10
+              track11
+              track12
+              track13
+              track14
+              track15 ]
+            |> List.map Track }
 
-    let playlist3 =
+    let sss0018 =
         let folder = @"D:\AUDIO\_MIXES\- sss0018 (for nick & olivia) -"
 
         let track1 = trackData folder "01. donato dozzy & tin man - test 3.wav"
@@ -126,34 +124,29 @@ let testState =
         let track16 = trackData folder "16. d.i.e. - no future in detroit.wav"
 
         { Id = PlaylistId.Create()
-          Name = Some "sss0018 (for nick & olivia)"
-          ItemsState =
-            Items(
-                items (
-                    track1,
-                    [ track2
-                      track3
-                      track4
-                      track5
-                      track6
-                      track7
-                      track8
-                      track9
-                      track10
-                      track11
-                      track12
-                      track13
-                      track14
-                      track15
-                      track16 ]
-                ),
-                track8.Id,
-                None
-            ) }
+          Name = "sss0018 (for nick & olivia)"
+          Items =
+            [ track1
+              track2
+              track3
+              track4
+              track5
+              track6
+              track7
+              track8
+              track9
+              track10
+              track11
+              track12
+              track13
+              track14
+              track15
+              track16 ]
+            |> List.map Track }
 
-    let playlist4 =
+    let newPlaylist =
         { Id = PlaylistId.Create()
-          Name = None
-          ItemsState = NoItems }
+          Name = "new playlist"
+          Items = [] }
 
-    Playlists(NonEmptyList<Playlist>.Create (playlist1, [ playlist2; playlist3; playlist4 ]))
+    [ wip; nwa3; sss0018; newPlaylist ]

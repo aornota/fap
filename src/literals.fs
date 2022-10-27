@@ -12,7 +12,7 @@ let APPLICATION_VERSION = "α" // note: also update ..\README.md
 let COLOUR_ACTIVE = "cyan"
 
 [<Literal>]
-let COLOUR_INACTIVE = "silver"
+let COLOUR_INACTIVE = "white"
 
 [<Literal>]
 let COLOUR_AWAITING = "yellow"
@@ -33,7 +33,7 @@ let COLOUR_DEBUG = "plum"
 let COLOUR_DISABLED_ICON = "black"
 
 [<Literal>]
-let COLOUR_DISABLED_TEXT = "gray"
+let COLOUR_DISABLED_TEXT = "silver"
 // #endregion
 
 // #region Folders

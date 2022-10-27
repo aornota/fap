@@ -16,6 +16,12 @@ type TrackData =
       Name: string
       Duration: int64<millisecond> option }
 
+type PlayerStatus =
+    | Active
+    | Awaiting
+    | Inactive
+    | Errored
+
 let fileExtensions = [ FILE_EXTENSION_FLAC; FILE_EXTENSION_MP3; FILE_EXTENSION_WAV ]
 
 let populateSongs (paths: string array) : TrackData array =
