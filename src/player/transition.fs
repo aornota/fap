@@ -65,9 +65,9 @@ let transition msg (state: State) (player: MediaPlayer) =
         | _ -> false
 
     let notifyError error =
-        state, Cmd.none, Some(NotifyError $"Player.transition -> {error}")
+        state, Cmd.none, [ NotifyError $"Player.transition -> {error}" ]
 
-    let noChange = state, Cmd.none, None
+    let noChange = state, Cmd.none, []
 
     match msg with
     | Seek position ->
@@ -98,13 +98,13 @@ let transition msg (state: State) (player: MediaPlayer) =
                         TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
                         SeekRequests = (fst seekRequest) :: state.SeekRequests },
                     Cmd.OfAsync.perform delay () DebounceSeekRequest,
-                    None
+                    []
                 else
                     noChange
             | Paused _ ->
-                { state with TrackState = Some { trackState with PlayerState = Paused position } }, Cmd.none, None
+                { state with TrackState = Some { trackState with PlayerState = Paused position } }, Cmd.none, []
             | Stopped _ ->
-                { state with TrackState = Some { trackState with PlayerState = Stopped position } }, Cmd.none, None
+                { state with TrackState = Some { trackState with PlayerState = Stopped position } }, Cmd.none, []
             | _ -> noChange // TODO-NMB: No need to notify error for this?...notifyError $"{nameof (Seek)} when {nameof (PlayerState)} is not {nameof (Playing)}, {nameof (Paused)} or {nameof (Stopped)}"
         | None -> noChange // TODO-NMB: No need to notify error for this?...notifyError $"{nameof (Seek)} when trackState is {nameof (None)}"
     | DebounceSeekRequest (seekRequestId, position) ->
@@ -117,7 +117,7 @@ let transition msg (state: State) (player: MediaPlayer) =
                     |> List.filter (fun otherSeekRequestId -> otherSeekRequestId <> seekRequestId)
 
                 match newSeekRequests with
-                | _ :: _ -> { state with SeekRequests = newSeekRequests }, Cmd.none, None
+                | _ :: _ -> { state with SeekRequests = newSeekRequests }, Cmd.none, []
                 | [] ->
                     player.Position <- position
 
@@ -125,19 +125,19 @@ let transition msg (state: State) (player: MediaPlayer) =
                         TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
                         SeekRequests = [] },
                     Cmd.none,
-                    None
+                    []
             | _ -> notifyError $"{nameof (DebounceSeekRequest)} when {nameof (PlayerState)} not {nameof (Playing)}"
         | None -> notifyError $"{nameof (DebounceSeekRequest)} when trackState is {nameof (None)}"
     | Previous ->
         match state.TrackState with
         | Some trackState when trackState.HasPrevious ->
-            state, Cmd.none, Some(RequestPrevious(trackState.Track.Id, isPlaying trackState.PlayerState))
+            state, Cmd.none, [ RequestPrevious(trackState.Track.Id, isPlaying trackState.PlayerState) ]
         | Some _ -> notifyError $"{nameof (Previous)} when not trackState.HasPrevious"
         | None -> notifyError $"{nameof (Previous)} when trackState is {nameof (None)}"
     | Next ->
         match state.TrackState with
         | Some trackState when trackState.HasNext ->
-            state, Cmd.none, Some(RequestNext(trackState.Track.Id, isPlaying trackState.PlayerState))
+            state, Cmd.none, [ RequestNext(trackState.Track.Id, isPlaying trackState.PlayerState) ]
         | Some _ -> notifyError $"{nameof (Next)} when not trackState.HasNext"
         | None -> notifyError $"{nameof (Next)} when trackState is {nameof (None)}"
     | Play ->
@@ -148,23 +148,19 @@ let transition msg (state: State) (player: MediaPlayer) =
             | Ended ->
                 playTrack trackState.Track
 
-                { state with TrackState = Some { trackState with PlayerState = AwaitingPlay } }, Cmd.none, None
+                { state with TrackState = Some { trackState with PlayerState = AwaitingPlay } }, Cmd.none, []
             | AwaitingPlay _ -> notifyError $"{nameof (Play)} when {nameof (PlayerState)} is {nameof (AwaitingPlay)}"
             | Playing _ -> notifyError $"{nameof (Play)} when {nameof (PlayerState)} already {nameof (Playing)}"
             | Paused position ->
                 player.Pause()
                 player.Position <- position
 
-                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } },
-                Cmd.none,
-                None
+                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } }, Cmd.none, []
             | Stopped position ->
                 player.Play() |> ignore
                 player.Position <- position
 
-                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } },
-                Cmd.none,
-                None
+                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } }, Cmd.none, []
             | PlaybackErrored ->
                 notifyError $"{nameof (Play)} when {nameof (PlayerState)} is {nameof (PlaybackErrored)}"
         | None -> notifyError $"{nameof (Play)} when trackState is {nameof (None)}"
@@ -174,7 +170,7 @@ let transition msg (state: State) (player: MediaPlayer) =
             match trackState.PlayerState with
             | Playing (position, _) ->
                 player.Pause()
-                { state with TrackState = Some { trackState with PlayerState = Paused position } }, Cmd.none, None
+                { state with TrackState = Some { trackState with PlayerState = Paused position } }, Cmd.none, []
             | _ -> notifyError $"{nameof (Pause)} when {nameof (PlayerState)} is not {nameof (Playing)}"
         | None -> notifyError $"{nameof (Pause)} when trackState is {nameof (None)}"
     | Stop ->
@@ -185,9 +181,7 @@ let transition msg (state: State) (player: MediaPlayer) =
             | Paused _ ->
                 player.Stop()
 
-                { state with TrackState = Some { trackState with PlayerState = Stopped START_POSITION } },
-                Cmd.none,
-                None
+                { state with TrackState = Some { trackState with PlayerState = Stopped START_POSITION } }, Cmd.none, []
             | _ ->
                 notifyError
                     $"{nameof (Stop)} when {nameof (PlayerState)} is not {nameof (Playing)} or {nameof (Paused)}"
@@ -195,18 +189,23 @@ let transition msg (state: State) (player: MediaPlayer) =
     | ToggleMuted ->
         let newMuted = not state.Muted
         player.Mute <- newMuted
-        { state with Muted = newMuted }, Cmd.none, Some NotifyMutedToggled
+        { state with Muted = newMuted }, Cmd.none, [ NotifyMutedToggled ]
     | Volume volume ->
         if volume <> state.Volume then
             let newMuted = volume = 0
             player.Mute <- newMuted
             player.Volume <- playerVolume volume
 
+            let externalMsgs =
+                [ NotifyVolumeChanged
+                  if newMuted <> state.Muted then
+                      NotifyMutedToggled ]
+
             { state with
                 Muted = newMuted
                 Volume = volume },
             Cmd.none,
-            Some NotifyVolumeChanged
+            externalMsgs
         else
             noChange
     | NotifyTrackRequested (trackData, playlistName, hasPrevious, hasNext, play) ->
@@ -252,7 +251,7 @@ let transition msg (state: State) (player: MediaPlayer) =
                 )
 
         match tryNewStateAndCmd with
-        | Ok (newState, cmd) -> newState, cmd, None
+        | Ok (newState, cmd) -> newState, cmd, []
         | Error error -> notifyError error
     (*| NotifyTrackContextUpdated (trackId, playlistName, hasPrevious, hasNext) ->
         match state.TrackState with
@@ -285,20 +284,20 @@ let transition msg (state: State) (player: MediaPlayer) =
                                     PlayerState = Playing(START_POSITION, None) } }
                 | _ -> state
 
-            newState, Cmd.none, Some(ExternalMsg.NotifyPlaying(trackState.Track.Id, duration))
+            newState, Cmd.none, [ ExternalMsg.NotifyPlaying(trackState.Track.Id, duration) ]
         | None -> notifyError $"{nameof (NotifyPlaying)} when trackState is {nameof (None)}"
     | NotifyPaused ->
         match state.TrackState with
-        | Some trackState -> state, Cmd.none, Some(ExternalMsg.NotifyPaused trackState.Track.Id)
+        | Some trackState -> state, Cmd.none, [ ExternalMsg.NotifyPaused trackState.Track.Id ]
         | None -> notifyError $"{nameof (NotifyPaused)} when trackState is {nameof (None)}"
     | NotifyStopped ->
         match state.TrackState with
         | Some trackState ->
             let externalMsg =
                 if trackState.PlayerState <> PlaybackErrored then
-                    Some(ExternalMsg.NotifyStopped trackState.Track.Id)
+                    [ ExternalMsg.NotifyStopped trackState.Track.Id ]
                 else
-                    None
+                    []
 
             state, Cmd.none, externalMsg
         | None -> notifyError $"{nameof (NotifyStopped)} when trackState is {nameof (None)}"
@@ -309,11 +308,11 @@ let transition msg (state: State) (player: MediaPlayer) =
             | Playing _ ->
                 let externalMsg =
                     if trackState.HasNext then
-                        Some(ExternalMsg.RequestNext(trackState.Track.Id, true))
+                        RequestNext(trackState.Track.Id, true)
                     else
-                        Some(ExternalMsg.NotifyEnded trackState.Track.Id)
+                        ExternalMsg.NotifyEnded trackState.Track.Id
 
-                { state with TrackState = Some { trackState with PlayerState = Ended } }, Cmd.none, externalMsg
+                { state with TrackState = Some { trackState with PlayerState = Ended } }, Cmd.none, [ externalMsg ]
             | _ -> notifyError $"{nameof (NotifyEnded)} when {nameof (PlayerState)} not {nameof (Playing)}"
         | None -> notifyError $"{nameof (NotifyEnded)} when trackState is {nameof (None)}"
     | NotifyPositionChanged position ->
@@ -328,7 +327,7 @@ let transition msg (state: State) (player: MediaPlayer) =
 
                 { state with TrackState = Some { trackState with PlayerState = Playing(newPosition, Some position) } },
                 Cmd.none,
-                None
+                []
             | _ -> notifyError $"{nameof (NotifyPositionChanged)} when {nameof (PlayerState)} not {nameof (Playing)}"
         | None -> notifyError $"{nameof (NotifyPositionChanged)} when trackState is {nameof (None)}"
     | NotifyPlaybackErrored ->
@@ -338,7 +337,7 @@ let transition msg (state: State) (player: MediaPlayer) =
             | AwaitingPlay _ ->
                 { state with TrackState = Some { trackState with PlayerState = PlaybackErrored } },
                 Cmd.none,
-                Some(ExternalMsg.NotifyPlaybackErrored trackState.Track.Id)
+                [ ExternalMsg.NotifyPlaybackErrored trackState.Track.Id ]
             | _ ->
                 notifyError
                     $"{nameof (NotifyPlaybackErrored)} when {nameof (PlayerState)} is not {nameof (AwaitingPlay)}"

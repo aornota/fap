@@ -127,20 +127,20 @@ let init (playlists: Playlist list) =
                 match hasPreviousAndOrNext playlist trackData.Id with
                 | Ok (hasPrevious, hasNext) ->
                     Some(trackData.Id, Inactive),
-                    Some(RequestTrack(trackData, playlist.Name, hasPrevious, hasNext, false))
-                | Error error -> None, Some(NotifyError $"Playlists.init -> {error}")
-            | [] -> None, None
-        | [] -> None, None
+                    [ RequestTrack(trackData, playlist.Name, hasPrevious, hasNext, false) ]
+                | Error error -> None, [ NotifyError $"Playlists.init -> {error}" ]
+            | [] -> None, []
+        | [] -> None, []
 
     { Playlists = playlists
       PlayerStatus = playerStatus },
     externalMsg
 
-let transition msg state : State * Cmd<Msg> * ExternalMsg option =
+let transition msg state =
     let notifyError error =
-        state, Cmd.none, Some(NotifyError $"Playlists.transition -> {error}")
+        state, Cmd.none, [ NotifyError $"Playlists.transition -> {error}" ]
 
-    let noChange = state, Cmd.none
+    let noChange = state, Cmd.none, []
 
     match msg with
     | PlayTrack trackId ->
@@ -150,7 +150,7 @@ let transition msg state : State * Cmd<Msg> * ExternalMsg option =
             | Ok (hasPrevious, hasNext) ->
                 { state with PlayerStatus = Some(trackId, Awaiting) },
                 Cmd.none,
-                Some(RequestTrack(trackData, playlist.Name, hasPrevious, hasNext, true))
+                [ RequestTrack(trackData, playlist.Name, hasPrevious, hasNext, true) ]
             | Error error -> notifyError $"{nameof (PlayTrack)}: {error}"
         | Error error -> notifyError $"{nameof (PlayTrack)}: {error}"
     | NotifyRequestPrevious (trackId, play) ->
@@ -164,7 +164,7 @@ let transition msg state : State * Cmd<Msg> * ExternalMsg option =
 
                     { state with PlayerStatus = Some(previous.Id, playerStatus) },
                     Cmd.none,
-                    Some(RequestTrack(previous, playlist.Name, hasPrevious, hasNext, play))
+                    [ RequestTrack(previous, playlist.Name, hasPrevious, hasNext, play) ]
                 | Error error -> notifyError $"{nameof (NotifyRequestPrevious)}: {error}"
             | Ok (None, _) ->
                 notifyError
@@ -182,7 +182,7 @@ let transition msg state : State * Cmd<Msg> * ExternalMsg option =
 
                     { state with PlayerStatus = Some(next.Id, playerStatus) },
                     Cmd.none,
-                    Some(RequestTrack(next, playlist.Name, hasPrevious, hasNext, play))
+                    [ RequestTrack(next, playlist.Name, hasPrevious, hasNext, play) ]
                 | Error error -> notifyError $"{nameof (NotifyRequestNext)}: {error}"
             | Ok (_, None) ->
                 notifyError
@@ -201,13 +201,13 @@ let transition msg state : State * Cmd<Msg> * ExternalMsg option =
                             Playlists = newPlaylists
                             PlayerStatus = Some(trackId, Active) },
                         Cmd.none,
-                        None
+                        []
                     | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
                 | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
             else
-                { state with PlayerStatus = Some(trackId, Active) }, Cmd.none, None
+                { state with PlayerStatus = Some(trackId, Active) }, Cmd.none, []
         | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
-    | NotifyPaused trackId -> { state with PlayerStatus = Some(trackId, Awaiting) }, Cmd.none, None
+    | NotifyPaused trackId -> { state with PlayerStatus = Some(trackId, Awaiting) }, Cmd.none, []
     | NotifyStopped trackId
-    | NotifyEnded trackId -> { state with PlayerStatus = Some(trackId, Inactive) }, Cmd.none, None
-    | NotifyPlaybackErrored trackId -> { state with PlayerStatus = Some(trackId, Errored) }, Cmd.none, None
+    | NotifyEnded trackId -> { state with PlayerStatus = Some(trackId, Inactive) }, Cmd.none, []
+    | NotifyPlaybackErrored trackId -> { state with PlayerStatus = Some(trackId, Errored) }, Cmd.none, []
