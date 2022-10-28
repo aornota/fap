@@ -25,8 +25,12 @@ type WritePlaylistRequestId =
 
 type State =
     { Playlists: Playlist list
+      SelectedPlaylistId: PlaylistId option
       PlayerStatus: (TrackId * PlayerStatus) option
       WritePlaylistRequests: (WritePlaylistRequestId * PlaylistId) list }
+
+[<Literal>]
+let NEW_PLAYLIST = "new playlist"
 
 let private playlistFile (PlaylistId guid) = $"{guid}.{fileExtension Playlist}"
 

@@ -101,7 +101,7 @@ let private itemsView (items: Item list) (playerStatus: (TrackId * PlayerStatus)
               DataTemplateView<Item * option<TrackId * PlayerStatus>>.create (fun item -> itemTemplate item)
           ) ]
 
-let private playlistTab (playerStatus: (TrackId * PlayerStatus) option) dispatch playlist : IView =
+let private playlistTab selectedPlaylistId (playerStatus: (TrackId * PlayerStatus) option) dispatch playlist : IView =
     let colour =
         match playerStatus with
         | Some (trackId, playerStatus) ->
@@ -132,16 +132,22 @@ let private playlistTab (playerStatus: (TrackId * PlayerStatus) option) dispatch
         [ TabItem.header playlist.Name
           TabItem.foreground colour
           TabItem.fontSize 13.
-          TabItem.content content ]
+          TabItem.isSelected (Some playlist.Id = selectedPlaylistId)
+          TabItem.content content
+          TabItem.onIsSelectedChanged (fun selected ->
+              if selected then
+                  dispatch (SelectPlaylist playlist.Id)) ]
 
 let view state dispatch =
-    // TODO-NMB: Show "Session" details?...
     match state.Playlists with
     | _ :: _ ->
         TabControl.create
             [ TabControl.dock Dock.Top
               TabControl.tabStripPlacement Dock.Top
-              TabControl.viewItems (state.Playlists |> List.map (playlistTab state.PlayerStatus dispatch)) ]
+              TabControl.viewItems (
+                  state.Playlists
+                  |> List.map (playlistTab state.SelectedPlaylistId state.PlayerStatus dispatch)
+              ) ]
         :> IView
     | [] ->
         TextBlock.create

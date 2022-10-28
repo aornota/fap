@@ -8,11 +8,22 @@ open Avalonia.Controls
 open Avalonia.Media.Imaging
 open System
 
-// TODO-NMB: LastFolder? "Session"?...
-type Preferences =
+type SessionId =
+    | SessionId of Guid
+
+    static member Create() = SessionId(Guid.NewGuid())
+
+type Session =
+    { Id: SessionId
+      Name: string
+      PlaylistIds: Playlists.Model.PlaylistId list }
+
+type Preferences = // TODO-NMB: LastAudioFolder?...
     { NormalSize: float * float
       NormalLocation: int * int
       WindowState: WindowState
+      LastSessionId: SessionId option
+      LastTrackId: TrackId option
       Muted: bool
       Volume: int }
 
@@ -21,6 +32,11 @@ type ErrorId =
 
     static member Create() = ErrorId(Guid.NewGuid())
 
+type WriteSessionRequestId =
+    | WriteSessionRequestId of Guid
+
+    static member Create() = WriteSessionRequestId(Guid.NewGuid())
+
 type WritePreferencesRequestId =
     | WritePreferencesRequestId of Guid
 
@@ -28,15 +44,19 @@ type WritePreferencesRequestId =
         WritePreferencesRequestId(Guid.NewGuid())
 
 type WritePreferencesRequestSource =
-    | App
+    | AppWindow
+    | AppSession
+    | Playlists
     | Player
 
 type State =
-    { ShowingErrors: bool
+    { Session: Session
+      ShowingErrors: bool
       Errors: (ErrorId * DateTime * string) list
       LastNormalSize: float * float
       LastNormalLocation: int * int
       LastWindowState: WindowState
+      WriteSessionRequests: WriteSessionRequestId list
       WritePreferencesRequests: (WritePreferencesRequestId * WritePreferencesRequestSource) list
       PlaylistsState: Playlists.Model.State
       PlayerState: Player.Model.State }
@@ -47,14 +67,19 @@ let MIN_WIDTH = 800.
 [<Literal>]
 let MIN_HEIGHT = 600.
 
-let private preferencesFile = $"{Environment.UserName}.{fileExtension Preferences}"
+[<Literal>]
+let NEW_SESSION = "new session"
 
-let defaultPreferences =
-    { NormalSize = MIN_WIDTH, MIN_HEIGHT
-      NormalLocation = 0, 0
-      WindowState = WindowState.Normal
-      Muted = false
-      Volume = 100 }
+let private preferencesFile =
+    $"{Environment.UserName.ToLowerInvariant()}.{fileExtension Preferences}"
+
+let private sessionFile (SessionId guid) = $"{guid}.{fileExtension Session}"
+
+let readSession sessionId =
+    async { return! read<Session> Session (sessionFile sessionId) }
+
+let writeSession session =
+    async { return! write Session (sessionFile session.Id) session }
 
 let readPreferences () =
     async { return! read<Preferences> Preferences preferencesFile }

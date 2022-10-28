@@ -27,7 +27,7 @@ let COLOUR_VOLUME = "#ee82ee" // violet
 let COLOUR_ERROR = "#ff6347" // tomato
 
 [<Literal>]
-let COLOUR_SUMMARY = "#f0fff0" // honeydew
+let COLOUR_SUMMARY = "#b0e0e6" // powderblue
 
 [<Literal>]
 let COLOUR_REMOVE = "#ffa07a" // lightsalmon

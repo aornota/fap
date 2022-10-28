@@ -19,7 +19,7 @@ let private NO_ERRORS = "- no errors -"
 [<Literal>]
 let private TIMESTAMP_FORMAT = "yyyy-MM-dd 'at' HH:mm:ss.fff"
 
-let private menuBar state dispatch =
+let private menu state dispatch =
     let showOrHideErrorsText, showOrHideErrorsColour =
         if state.ShowingErrors then
             "Hide", COLOUR_INACTIVE
@@ -105,14 +105,32 @@ let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
               TextBlock.text NO_ERRORS ]
 
 let view state dispatch =
+    let session =
+        TextBlock.create
+            [ TextBlock.dock Dock.Top
+              TextBlock.verticalAlignment VerticalAlignment.Center
+              TextBlock.horizontalAlignment HorizontalAlignment.Center
+              TextBlock.textAlignment TextAlignment.Center
+              TextBlock.fontSize 16.
+              TextBlock.padding (0, 5, 0, 5)
+              TextBlock.foreground COLOUR_INACTIVE
+              TextBlock.text state.Session.Name ]
+
+    let trackCount =
+        state.PlaylistsState.Playlists
+        |> List.collect (fun playlist -> Playlists.Transition.tracks playlist)
+        |> List.length
+
     DockPanel.create
         [ DockPanel.verticalAlignment VerticalAlignment.Stretch
           DockPanel.horizontalAlignment HorizontalAlignment.Stretch
           DockPanel.lastChildFill (state.PlaylistsState.Playlists.Length > 0)
           DockPanel.children
               [ if isDebug then
-                    menuBar state dispatch
+                    menu state dispatch
                 if isDebug && state.ShowingErrors then
                     errorsView state.Errors dispatch
-                Player.View.view state.PlayerState (PlayerMsg >> dispatch)
+                session
+                if trackCount > 0 then
+                    Player.View.view state.PlayerState (PlayerMsg >> dispatch)
                 Playlists.View.view state.PlaylistsState (PlaylistsMsg >> dispatch) ] ]

@@ -17,6 +17,8 @@ type Msg =
     | AddError of string
     | ClearError of ErrorId
     | ClearAllErrors
+    | WriteSession
+    | DebounceWriteSessionRequest of WriteSessionRequestId
     | WritePreferences of WritePreferencesRequestSource
     | DebounceWritePreferencesRequest of WritePreferencesRequestId * WritePreferencesRequestSource
     (* | OpenFiles
@@ -34,6 +36,9 @@ type Msg =
     | PlayerErrored
 
 [<Literal>]
+let private DEBOUNCE_WRITE_SESSION_REQUEST_DELAY = 250
+
+[<Literal>]
 let private DEBOUNCE_WRITE_PREFERENCES_REQUEST_DELAY = 250
 
 let private makeError error =
@@ -49,6 +54,8 @@ let private handlePlaylistsExternal msg =
                   )
               )
               Cmd.ofMsg (UpdateTitle(trackData, playlistName)) ]
+    | Playlists.Transition.ExternalMsg.RequestWriteSession -> Cmd.ofMsg WriteSession
+    | Playlists.Transition.ExternalMsg.RequestWritePreferences -> Cmd.ofMsg (WritePreferences Playlists)
     | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
 let private handlePlayerExternal msg =
@@ -82,33 +89,23 @@ let private handlePlayerExternal msg =
         Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg (WritePreferences Player) ]
     | Player.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
 
-// TODO-NMB: Remove this once Session persistence implemented...
-let private tempPlaylistIds =
-    [ Playlists.Model.PlaylistId(Guid("e7cc6cd6-7ef3-404c-bdc8-02c285c064fe")) // wip (mellow)
-      Playlists.Model.PlaylistId(Guid("67367509-813f-4266-b217-e41e9c3f53f5")) // now we are 03
-      Playlists.Model.PlaylistId(Guid("3aff9190-f542-43d2-a50d-a032b4d840a9")) // sss0018 (for nick & olivia)
-      Playlists.Model.PlaylistId(Guid("4250968a-d4cc-4fa5-bbcc-f2f5c9f3d3c9")) ] // new playlist
+let init preferences session (startupErrors: string list) =
+    let playlistsState, playlistsMsg =
+        Playlists.Transition.init session.PlaylistIds preferences.LastTrackId
 
-let init preferences preferencesErrors =
-    let errors = preferencesErrors |> List.map makeError
-
-    // TODO-NMB: Get from "Session"...
-    let playlistIds = tempPlaylistIds
-
-    let playlistsState, playlistsMsg = Playlists.Transition.init playlistIds
-
-    let playerState = Player.Transition.init preferences.Muted preferences.Volume
-
-    { ShowingErrors = isDebug && errors.Length > 0
-      Errors = errors
+    { Session = session
+      ShowingErrors = isDebug && startupErrors.Length > 0
+      Errors = startupErrors |> List.map makeError
       LastNormalSize = preferences.NormalSize
       LastNormalLocation = preferences.NormalLocation
       LastWindowState = preferences.WindowState
+      WriteSessionRequests = []
       WritePreferencesRequests = []
       PlaylistsState = playlistsState
-      PlayerState = playerState },
+      PlayerState = Player.Transition.init preferences.Muted preferences.Volume },
     Cmd.ofMsg (PlaylistsMsg playlistsMsg)
 
+// TODO-NMB: If new Session, call WritePreferences AppSession...
 let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     let preferences () =
         let isNormal = window.WindowState = WindowState.Normal
@@ -124,10 +121,15 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             else
                 state.LastNormalLocation
           WindowState = window.WindowState
+          LastSessionId = Some state.Session.Id
+          LastTrackId =
+            match state.PlaylistsState.PlayerStatus with
+            | Some (trackId, playerStatus) when playerStatus <> Errored -> Some trackId
+            | _ -> None
           Muted = state.PlayerState.Muted
           Volume = state.PlayerState.Volume }
 
-    let handleWritePreferencesResult =
+    let handleResult =
         function
         | Ok _ -> NoOp
         | Error error -> AddError error
@@ -161,6 +163,33 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 |> List.filter (fun (otherErrorId, _, _) -> otherErrorId <> errorId) },
         Cmd.none
     | ClearAllErrors -> { state with Errors = [] }, Cmd.none
+    | WriteSession ->
+        let writeSessionRequestId = WriteSessionRequestId.Create()
+
+        let delay () =
+            async {
+                do! Async.Sleep DEBOUNCE_WRITE_SESSION_REQUEST_DELAY
+                return writeSessionRequestId
+            }
+
+        { state with WriteSessionRequests = writeSessionRequestId :: state.WriteSessionRequests },
+        Cmd.OfAsync.perform delay () DebounceWriteSessionRequest
+    | DebounceWriteSessionRequest writeSessionRequestId ->
+        let newWriteSessionRequests =
+            state.WriteSessionRequests
+            |> List.filter (fun otherWriteSessionRequestId -> otherWriteSessionRequestId <> writeSessionRequestId)
+
+        match newWriteSessionRequests with
+        | _ :: _ -> { state with WriteSessionRequests = newWriteSessionRequests }, Cmd.none
+        | [] ->
+            let newSession =
+                { state.Session with
+                    PlaylistIds = state.PlaylistsState.Playlists |> List.map (fun playlist -> playlist.Id) }
+
+            { state with
+                Session = newSession
+                WriteSessionRequests = newWriteSessionRequests },
+            Cmd.OfAsync.perform writeSession newSession handleResult
     | WritePreferences source ->
         let writePreferencesRequest = WritePreferencesRequestId.Create(), source
 
@@ -186,12 +215,14 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         | [] ->
             let write =
                 match source with
-                | App ->
+                | AppWindow ->
                     (window.WindowState = WindowState.Normal
                      && ((window.Width, window.Height) <> state.LastNormalSize
                          || (window.Position.X, window.Position.Y) <> state.LastNormalLocation))
                     || (window.WindowState <> WindowState.Minimized
                         && window.WindowState <> state.LastWindowState)
+                | AppSession
+                | Playlists
                 | Player -> true
 
             if write then
@@ -202,7 +233,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                     LastNormalLocation = preferences.NormalLocation
                     LastWindowState = preferences.WindowState
                     WritePreferencesRequests = newWritePreferencesRequests },
-                Cmd.OfAsync.perform writePreferences preferences handleWritePreferencesResult
+                Cmd.OfAsync.perform writePreferences preferences handleResult
             else
                 { state with WritePreferencesRequests = newWritePreferencesRequests }, Cmd.none
     (* | OpenFiles ->

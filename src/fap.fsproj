@@ -2,9 +2,9 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <RootNamespace>Aornota.Fap</RootNamespace>
     <ApplicationIcon>assets\resources\fap-multi.ico</ApplicationIcon>
+    <RootNamespace>Aornota.Fap</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="literals.fs" />
@@ -35,7 +35,7 @@
     <PackageReference Include="JaggerJo.Avalonia.FuncUI.DSL" Version="0.5.3" />
     <PackageReference Include="JaggerJo.Avalonia.FuncUI.Elmish" Version="0.5.3" />
     <PackageReference Include="LibVLCSharp" Version="3.6.6" />
-    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+    <!-- <PackageReference Include="TagLibSharp" Version="2.3.0" /> -->
     <PackageReference Include="Thoth.Json.Net" Version="8.0.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.17.4" />
   </ItemGroup>

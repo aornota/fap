@@ -14,12 +14,11 @@ open Avalonia.Controls.ApplicationLifetimes
 open Avalonia.FuncUI.Elmish
 open Avalonia.FuncUI.Hosts
 open Avalonia.Input
-open Avalonia.Media.Imaging
 open Avalonia.Themes.Fluent
 open LibVLCSharp.Shared
 open System
 
-type AppWindow(preferences: Preferences, preferencesErrors) as this =
+type AppWindow(preferences, session, startupErrors) as this =
     inherit HostWindow()
 
     do
@@ -41,7 +40,7 @@ type AppWindow(preferences: Preferences, preferencesErrors) as this =
         player.Mute <- preferences.Muted
         player.Volume <- playerVolume preferences.Volume
 
-        let init _ = init preferences preferencesErrors
+        let init _ = init preferences session startupErrors
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif
@@ -72,22 +71,47 @@ type App() =
     override this.OnFrameworkInitializationCompleted() =
         match this.ApplicationLifetime with
         | :? IClassicDesktopStyleApplicationLifetime as desktopLifetime ->
-            (* TDOD-NMB: Rework to create initial persisted Session...
-            Playlists.Temp.testPlaylists // note: no longer defined
-            |> List.iter (fun playlist -> Playlists.Model.writePlaylist playlist |> Async.RunSynchronously |> ignore) *)
-
             let writeDefaultPreferences defaultPreferences =
                 match writePreferences defaultPreferences |> Async.RunSynchronously with
                 | Ok _ -> []
                 | Error error -> [ $"Program.writeDefaultPreferences -> {error}" ]
 
-            let preferences, preferencesErrors =
+            let defaultPreferences =
+                { NormalSize = MIN_WIDTH, MIN_HEIGHT
+                  NormalLocation = 0, 0
+                  WindowState = WindowState.Normal
+                  LastSessionId = None
+                  LastTrackId = None
+                  Muted = false
+                  Volume = 100 }
+
+            let preferences, startupErrors =
                 match readPreferences () |> Async.RunSynchronously with
                 | Ok preferences -> preferences, []
                 | Error FileNotFound -> defaultPreferences, writeDefaultPreferences defaultPreferences
                 | Error (Other error) -> defaultPreferences, writeDefaultPreferences defaultPreferences @ [ error ]
 
-            desktopLifetime.MainWindow <- AppWindow(preferences, preferencesErrors)
+            let writeDefaultSession defaultSession =
+                match writeSession defaultSession |> Async.RunSynchronously with
+                | Ok _ -> []
+                | Error error -> [ $"Program.writeDefaultSession -> {error}" ]
+
+            let defaultSession =
+                { Id = SessionId.Create()
+                  Name = NEW_SESSION
+                  PlaylistIds = [] }
+
+            let session, startupErrors =
+                match preferences.LastSessionId with
+                | Some sessionId ->
+                    match readSession sessionId |> Async.RunSynchronously with
+                    | Ok session -> session, startupErrors
+                    | Error FileNotFound -> defaultSession, writeDefaultSession defaultSession @ startupErrors
+                    | Error (Other error) ->
+                        defaultSession, writeDefaultSession defaultSession @ [ error ] @ startupErrors
+                | None -> defaultSession, startupErrors
+
+            desktopLifetime.MainWindow <- AppWindow(preferences, session, startupErrors)
         | _ -> ()
 
 [<EntryPoint>]
