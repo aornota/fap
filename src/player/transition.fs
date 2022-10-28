@@ -17,9 +17,9 @@ type ExternalMsg =
     | NotifyStopped of trackId: TrackId
     | NotifyEnded of trackId: TrackId
     | NotifyPlaybackErrored of trackId: TrackId
-    | NotifyError of string
     | NotifyMutedToggled
     | NotifyVolumeChanged
+    | NotifyError of string
 
 type Msg =
     | Seek of float32
@@ -32,7 +32,7 @@ type Msg =
     | ToggleMuted
     | Volume of int
     | NotifyTrackRequested of trackData: TrackData * hasPrevious: bool * hasNext: bool * play: bool
-    //| NotifyTrackContextUpdated of trackId: TrackId * playlistName: string * hasPrevious: bool * hasNext: bool
+    // TODO-NMB...| NotifyTrackContextUpdated of trackId: TrackId * playlistName: string * hasPrevious: bool * hasNext: bool
     | NotifyPlaying
     | NotifyPaused
     | NotifyStopped
@@ -246,7 +246,7 @@ let transition msg (state: State) (player: MediaPlayer) =
         match tryNewStateAndCmd with
         | Ok (newState, cmd) -> newState, cmd, []
         | Error error -> notifyError error
-    (*| NotifyTrackContextUpdated (trackId, playlistName, hasPrevious, hasNext) ->
+    (* TODO-NMB...| NotifyTrackContextUpdated (trackId, playlistName, hasPrevious, hasNext) ->
         match state.TrackState with
         | Some trackState when trackState.Track.Id = trackId ->
             { state with

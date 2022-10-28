@@ -48,8 +48,8 @@ let private handlePlaylistsExternal msg =
     match msg with
     | Playlists.Transition.ExternalMsg.RequestTrack (trackData, hasPrevious, hasNext, play) ->
         Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.NotifyTrackRequested(trackData, hasPrevious, hasNext, play)))
-    | Playlists.Transition.ExternalMsg.RequestWriteSession -> Cmd.ofMsg WriteSession
-    | Playlists.Transition.ExternalMsg.RequestWritePreferences ->
+    | Playlists.Transition.ExternalMsg.NotifyPlaylistsChanged -> Cmd.ofMsg WriteSession
+    | Playlists.Transition.ExternalMsg.NotifyPlayerStatusChanged ->
         Cmd.batch [ Cmd.ofMsg UpdateTitle; Cmd.ofMsg (WritePreferences Playlists) ]
     | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
@@ -79,10 +79,10 @@ let private handlePlayerExternal msg =
         Cmd.batch
             [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyPlaybackErrored trackId))
               Cmd.ofMsg UpdateIcon ]
-    | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
     | Player.Transition.ExternalMsg.NotifyMutedToggled ->
         Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg (WritePreferences Player) ]
     | Player.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
+    | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
 let init preferences session (startupErrors: string list) =
     let playlistsState, playlistsMsg =

@@ -8,8 +8,8 @@ open Elmish
 
 type ExternalMsg =
     | RequestTrack of trackData: TrackData * hasPrevious: bool * hasNext: bool * play: bool
-    | RequestWriteSession
-    | RequestWritePreferences
+    | NotifyPlaylistsChanged
+    | NotifyPlayerStatusChanged
     | NotifyError of string
 
 type Msg =
@@ -155,8 +155,8 @@ let init playlistIds lastTrackId = // TODO-NMB: Option to "auto-play" lastTrackI
       WritePlaylistRequests = [] },
     ReadPlaylists(playlistIds, lastTrackId)
 
-// TODO-NMB: If change TrackId for PlayerStatus - or if set PlayerStatus to None (or Some(_, Errored)) - call (external) RequestWritePreferences...
-// TODO-NMB: If add / remove / reorder Playlists, call (external) RequestWriteSession...
+// TODO-NMB: If change TrackId for PlayerStatus - or if set PlayerStatus to None [or Some(_, Errored)]- call (external) NotifyPlayerStatusChanged...
+// TODO-NMB: If add / remove / reorder Playlists, call (external) NotifyPlaylistsChanged...
 let transition msg state =
     let notifyError error =
         state, Cmd.none, [ NotifyError $"Playlists.transition -> {error}" ]
@@ -202,13 +202,13 @@ let transition msg state =
                 SelectedPlaylistId = selectedPlaylistId
                 PlayerStatus = playerStatus },
             Cmd.none,
-            RequestWritePreferences :: externalMsgs
+            NotifyPlayerStatusChanged :: externalMsgs
     | PlaylistRead (playlist, playlistIds, lastTrackId) ->
         let newPlaylists = (playlist :: (state.Playlists |> List.rev)) |> List.rev
 
         { state with Playlists = newPlaylists },
         Cmd.ofMsg (ReadPlaylists(playlistIds, lastTrackId)),
-        [ RequestWriteSession ]
+        [ NotifyPlaylistsChanged ]
     | ReadPlaylistError (readError, PlaylistId guid, playlistIds, lastTrackId) ->
         state,
         Cmd.ofMsg (ReadPlaylists(playlistIds, lastTrackId)),
@@ -261,7 +261,8 @@ let transition msg state =
             | Ok (hasPrevious, hasNext) ->
                 { state with PlayerStatus = Some(trackData.Id, Awaiting) },
                 Cmd.none,
-                [ RequestTrack(trackData, hasPrevious, hasNext, true); RequestWritePreferences ]
+                [ RequestTrack(trackData, hasPrevious, hasNext, true)
+                  NotifyPlayerStatusChanged ]
             | Error error -> notifyError $"{nameof (PlayTrack)}: {error}"
         | Error error -> notifyError $"{nameof (PlayTrack)}: {error}"
     | NoOp -> noChange
@@ -276,7 +277,8 @@ let transition msg state =
 
                     { state with PlayerStatus = Some(previous.Id, playerStatus) },
                     Cmd.none,
-                    [ RequestTrack(previous, hasPrevious, hasNext, play); RequestWritePreferences ]
+                    [ RequestTrack(previous, hasPrevious, hasNext, play)
+                      NotifyPlayerStatusChanged ]
                 | Error error -> notifyError $"{nameof (NotifyRequestPrevious)}: {error}"
             | Ok (None, _) ->
                 notifyError
@@ -294,7 +296,7 @@ let transition msg state =
 
                     { state with PlayerStatus = Some(next.Id, playerStatus) },
                     Cmd.none,
-                    [ RequestTrack(next, hasPrevious, hasNext, play); RequestWritePreferences ]
+                    [ RequestTrack(next, hasPrevious, hasNext, play); NotifyPlayerStatusChanged ]
                 | Error error -> notifyError $"{nameof (NotifyRequestNext)}: {error}"
             | Ok (_, None) ->
                 notifyError
@@ -323,4 +325,4 @@ let transition msg state =
     | NotifyStopped trackId
     | NotifyEnded trackId -> { state with PlayerStatus = Some(trackId, Inactive) }, Cmd.none, []
     | NotifyPlaybackErrored trackId ->
-        { state with PlayerStatus = Some(trackId, Errored) }, Cmd.none, [ RequestWritePreferences ]
+        { state with PlayerStatus = Some(trackId, Errored) }, Cmd.none, [ NotifyPlayerStatusChanged ]
