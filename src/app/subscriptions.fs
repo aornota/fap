@@ -1,6 +1,7 @@
 module Aornota.Fap.App.Subscriptions
 
 open Aornota.Fap.App
+open Aornota.Fap.App.Model
 open Avalonia.FuncUI.Hosts
 open Elmish
 open LibVLCSharp.Shared
@@ -9,14 +10,14 @@ open System
 // #region HostWindow subscription
 let locationChanged (window: HostWindow) =
     let sub dispatch =
-        window.PositionChanged.Subscribe(fun _ -> dispatch (Transition.Msg.SavePreferencesApp))
+        window.PositionChanged.Subscribe(fun _ -> dispatch (Transition.Msg.WritePreferences App))
         |> ignore
 
     Cmd.ofSub sub
 
 let effectiveViewportChanged (window: HostWindow) =
     let sub dispatch =
-        window.EffectiveViewportChanged.Subscribe(fun _ -> dispatch (Transition.Msg.SavePreferencesApp))
+        window.EffectiveViewportChanged.Subscribe(fun _ -> dispatch (Transition.Msg.WritePreferences App))
         |> ignore
 
     Cmd.ofSub sub

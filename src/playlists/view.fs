@@ -37,7 +37,7 @@ let private itemsView (items: Item list) (playerStatus: (TrackId * PlayerStatus)
                     | Inactive -> COLOUR_INACTIVE, true
                     | Errored -> COLOUR_ERROR, false
                 | _ -> COLOUR_DISABLED_TEXT, true
-            | Summary -> COLOUR_INACTIVE, false
+            | Summary -> COLOUR_SUMMARY, false
 
         let durationText, durationColour =
             match item with
@@ -47,7 +47,7 @@ let private itemsView (items: Item list) (playerStatus: (TrackId * PlayerStatus)
                     | Some _ -> colour
                     | None -> COLOUR_DISABLED_TEXT
 
-                durationText RoundUp trackData.Duration, colour
+                durationText trackData.Duration, colour
             | Summary -> "", COLOUR_INACTIVE
 
         let itemText, onDoubleTapped =

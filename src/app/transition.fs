@@ -15,17 +15,15 @@ type Msg =
     | UpdateIcon
     | ToggleShowingErrors
     | AddError of string
-    | RemoveError of ErrorId
+    | ClearError of ErrorId
     | ClearAllErrors
-    | SavePreferencesApp
-    | SavePreferencesPlayer
-    | DebounceSavePreferencesAppRequest of SavePreferencesRequestId
-    | DebounceSavePreferencesPlayerRequest of SavePreferencesRequestId
-    | NoOp
+    | WritePreferences of WritePreferencesRequestSource
+    | DebounceWritePreferencesRequest of WritePreferencesRequestId * WritePreferencesRequestSource
     (* | OpenFiles
     | OpenFolder
     | AfterSelectFolder of string
     | AfterSelectFiles of string array *)
+    | NoOp
     | PlaylistsMsg of Playlists.Transition.Msg
     | PlayerMsg of Player.Transition.Msg
     | PlayerPlaying
@@ -36,7 +34,7 @@ type Msg =
     | PlayerErrored
 
 [<Literal>]
-let private DEBOUNCE_SAVE_PREFERENCES_REQUEST_DELAY = 250
+let private DEBOUNCE_WRITE_PREFERENCES_REQUEST_DELAY = 250
 
 let private makeError error =
     ErrorId.Create(), DateTime.UtcNow, error
@@ -81,14 +79,23 @@ let private handlePlayerExternal msg =
               Cmd.ofMsg UpdateIcon ]
     | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
     | Player.Transition.ExternalMsg.NotifyMutedToggled ->
-        Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg SavePreferencesPlayer ]
-    | Player.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg SavePreferencesPlayer
+        Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg (WritePreferences Player) ]
+    | Player.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
+
+// TODO-NMB: Remove this once Session persistence implemented...
+let private tempPlaylistIds =
+    [ Playlists.Model.PlaylistId(Guid("e7cc6cd6-7ef3-404c-bdc8-02c285c064fe")) // wip (mellow)
+      Playlists.Model.PlaylistId(Guid("67367509-813f-4266-b217-e41e9c3f53f5")) // now we are 03
+      Playlists.Model.PlaylistId(Guid("3aff9190-f542-43d2-a50d-a032b4d840a9")) // sss0018 (for nick & olivia)
+      Playlists.Model.PlaylistId(Guid("4250968a-d4cc-4fa5-bbcc-f2f5c9f3d3c9")) ] // new playlist
 
 let init preferences preferencesErrors =
     let errors = preferencesErrors |> List.map makeError
 
-    let playlistsState, playlistsExternalMsgs =
-        Playlists.Transition.init Playlists.Temp.testPlaylists
+    // TODO-NMB: Get from "Session"...
+    let playlistIds = tempPlaylistIds
+
+    let playlistsState, playlistsMsg = Playlists.Transition.init playlistIds
 
     let playerState = Player.Transition.init preferences.Muted preferences.Volume
 
@@ -97,11 +104,10 @@ let init preferences preferencesErrors =
       LastNormalSize = preferences.NormalSize
       LastNormalLocation = preferences.NormalLocation
       LastWindowState = preferences.WindowState
-      SavePreferencesAppRequestIds = []
-      SavePreferencesPlayerRequestIds = []
+      WritePreferencesRequests = []
       PlaylistsState = playlistsState
       PlayerState = playerState },
-    Cmd.batch (playlistsExternalMsgs |> List.map handlePlaylistsExternal)
+    Cmd.ofMsg (PlaylistsMsg playlistsMsg)
 
 let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     let preferences () =
@@ -148,79 +154,57 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         noChange
     | ToggleShowingErrors -> { state with ShowingErrors = not state.ShowingErrors }, Cmd.none
     | AddError error -> { state with Errors = makeError error :: state.Errors }, Cmd.none
-    | RemoveError errorId ->
+    | ClearError errorId ->
         { state with
             Errors =
                 state.Errors
                 |> List.filter (fun (otherErrorId, _, _) -> otherErrorId <> errorId) },
         Cmd.none
     | ClearAllErrors -> { state with Errors = [] }, Cmd.none
-    | SavePreferencesApp ->
-        let savePreferencesRequestId = SavePreferencesRequestId.Create()
+    | WritePreferences source ->
+        let writePreferencesRequest = WritePreferencesRequestId.Create(), source
 
         let delay () =
             async {
-                do! Async.Sleep DEBOUNCE_SAVE_PREFERENCES_REQUEST_DELAY
-                return savePreferencesRequestId
+                do! Async.Sleep DEBOUNCE_WRITE_PREFERENCES_REQUEST_DELAY
+                return writePreferencesRequest
             }
 
-        { state with SavePreferencesAppRequestIds = savePreferencesRequestId :: state.SavePreferencesAppRequestIds },
-        Cmd.OfAsync.perform delay () DebounceSavePreferencesAppRequest
-    | SavePreferencesPlayer ->
-        let savePreferencesRequestId = SavePreferencesRequestId.Create()
+        { state with WritePreferencesRequests = writePreferencesRequest :: state.WritePreferencesRequests },
+        Cmd.OfAsync.perform delay () DebounceWritePreferencesRequest
+    | DebounceWritePreferencesRequest (writePreferencesRequestId, source) ->
+        let newWritePreferencesRequests =
+            state.WritePreferencesRequests
+            |> List.filter (fun (otherWritePreferencesRequestId, _) ->
+                otherWritePreferencesRequestId <> writePreferencesRequestId)
 
-        let delay () =
-            async {
-                do! Async.Sleep DEBOUNCE_SAVE_PREFERENCES_REQUEST_DELAY
-                return savePreferencesRequestId
-            }
-
-        { state with SavePreferencesPlayerRequestIds = savePreferencesRequestId :: state.SavePreferencesPlayerRequestIds },
-        Cmd.OfAsync.perform delay () DebounceSavePreferencesPlayerRequest
-    | DebounceSavePreferencesAppRequest savePreferencesRequestId ->
-        let newSavePreferencesAppRequestIds =
-            state.SavePreferencesAppRequestIds
-            |> List.filter (fun otherSavePreferencesRequestId ->
-                otherSavePreferencesRequestId <> savePreferencesRequestId)
-
-        match newSavePreferencesAppRequestIds with
-        | _ :: _ -> { state with SavePreferencesAppRequestIds = newSavePreferencesAppRequestIds }, Cmd.none
+        match
+            newWritePreferencesRequests
+            |> List.filter (fun (_, otherSource) -> otherSource = source)
+        with
+        | _ :: _ -> { state with WritePreferencesRequests = newWritePreferencesRequests }, Cmd.none
         | [] ->
-            if
-                (window.WindowState = WindowState.Normal
-                 && ((window.Width, window.Height) <> state.LastNormalSize
-                     || (window.Position.X, window.Position.Y) <> state.LastNormalLocation))
-                || (window.WindowState <> WindowState.Minimized
-                    && window.WindowState <> state.LastWindowState)
-            then
+            let write =
+                match source with
+                | App ->
+                    (window.WindowState = WindowState.Normal
+                     && ((window.Width, window.Height) <> state.LastNormalSize
+                         || (window.Position.X, window.Position.Y) <> state.LastNormalLocation))
+                    || (window.WindowState <> WindowState.Minimized
+                        && window.WindowState <> state.LastWindowState)
+                | Player -> true
+
+            if write then
                 let preferences = preferences ()
 
                 { state with
                     LastNormalSize = preferences.NormalSize
                     LastNormalLocation = preferences.NormalLocation
                     LastWindowState = preferences.WindowState
-                    SavePreferencesAppRequestIds = [] },
+                    WritePreferencesRequests = newWritePreferencesRequests },
                 Cmd.OfAsync.perform writePreferences preferences handleWritePreferencesResult
             else
-                { state with SavePreferencesAppRequestIds = [] }, Cmd.none
-    | DebounceSavePreferencesPlayerRequest savePreferencesRequestId ->
-        let newSavePreferencesPlayerRequestIds =
-            state.SavePreferencesPlayerRequestIds
-            |> List.filter (fun otherSavePreferencesRequestId ->
-                otherSavePreferencesRequestId <> savePreferencesRequestId)
-
-        match newSavePreferencesPlayerRequestIds with
-        | _ :: _ -> { state with SavePreferencesPlayerRequestIds = newSavePreferencesPlayerRequestIds }, Cmd.none
-        | [] ->
-            let preferences = preferences ()
-
-            { state with
-                LastNormalSize = preferences.NormalSize
-                LastNormalLocation = preferences.NormalLocation
-                LastWindowState = preferences.WindowState
-                SavePreferencesPlayerRequestIds = [] },
-            Cmd.OfAsync.perform writePreferences preferences handleWritePreferencesResult
-    | NoOp -> noChange
+                { state with WritePreferencesRequests = newWritePreferencesRequests }, Cmd.none
     (* | OpenFiles ->
         let dialog = Dialogs.getFilesDialog None
 
@@ -241,6 +225,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     | AfterSelectFiles paths ->
         let songs = populateSongs paths |> Array.toList
         state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs)) *)
+    | NoOp -> noChange
     | PlaylistsMsg playlistsMsg ->
         let newPlaylistState, cmd, externalMsgs =
             Playlists.Transition.transition playlistsMsg state.PlaylistsState

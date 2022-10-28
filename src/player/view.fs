@@ -76,7 +76,7 @@ let private progressBar state dispatch =
               TextBlock.width 40.
               TextBlock.fontSize 12.
               TextBlock.foreground durationColour
-              TextBlock.text (durationText RoundUp duration) ]
+              TextBlock.text (durationText duration) ]
 
     StackPanel.create
         [ StackPanel.verticalAlignment VerticalAlignment.Center

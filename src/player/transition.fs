@@ -123,7 +123,7 @@ let transition msg (state: State) (player: MediaPlayer) =
 
                     { state with
                         TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
-                        SeekRequests = [] },
+                        SeekRequests = newSeekRequests },
                     Cmd.none,
                     []
             | _ -> notifyError $"{nameof (DebounceSeekRequest)} when {nameof (PlayerState)} not {nameof (Playing)}"

@@ -58,7 +58,7 @@ type AppWindow(preferences: Preferences, preferencesErrors) as this =
         |> Program.withSubscription (fun _ -> Subscriptions.positionChanged player)
         |> Program.withSubscription (fun _ -> Subscriptions.playbackErrored player)
 #if DEBUG
-        |> Program.withConsoleTrace
+        // |> Program.withConsoleTrace
 #endif
         |> Program.run
 
@@ -72,6 +72,10 @@ type App() =
     override this.OnFrameworkInitializationCompleted() =
         match this.ApplicationLifetime with
         | :? IClassicDesktopStyleApplicationLifetime as desktopLifetime ->
+            (* TDOD-NMB: Rework to create initial persisted Session...
+            Playlists.Temp.testPlaylists // note: no longer defined
+            |> List.iter (fun playlist -> Playlists.Model.writePlaylist playlist |> Async.RunSynchronously |> ignore) *)
+
             let writeDefaultPreferences defaultPreferences =
                 match writePreferences defaultPreferences |> Async.RunSynchronously with
                 | Ok _ -> []
@@ -87,7 +91,7 @@ type App() =
         | _ -> ()
 
 [<EntryPoint>]
-// TODO-NMB: How to make use of args?...
+// TODO-NMB: Make use of args?...
 let main (args: string[]) =
     AppBuilder
         .Configure<App>()

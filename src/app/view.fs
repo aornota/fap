@@ -48,7 +48,7 @@ let private menuBar state dispatch =
                                         MenuItem.create
                                             [ MenuItem.header "Clear all"
                                               MenuItem.fontSize 12.
-                                              MenuItem.foreground COLOUR_INACTIVE
+                                              MenuItem.foreground COLOUR_REMOVE
                                               MenuItem.isEnabled (state.Errors.Length > 0)
                                               MenuItem.onClick (fun _ -> dispatch ClearAllErrors) ] ] ] ] ] ] ]
 
@@ -73,9 +73,9 @@ let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
                           Button.background COLOUR_BACKGROUND
                           Button.cornerRadius 0
                           Button.margin (10, 0, 0, 0)
-                          Button.content (Icons.remove true (Some COLOUR_DISABLED_TEXT) None)
-                          Button.tip "Remove error"
-                          Button.onClick (fun _ -> dispatch (RemoveError errorId)) ]
+                          Button.content (Icons.remove true (Some COLOUR_REMOVE) None)
+                          Button.tip "Clear error"
+                          Button.onClick (fun _ -> dispatch (ClearError errorId)) ]
                     TextBlock.create
                         [ TextBlock.verticalAlignment VerticalAlignment.Center
                           TextBlock.textAlignment TextAlignment.Left

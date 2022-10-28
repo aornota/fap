@@ -27,6 +27,12 @@ let COLOUR_VOLUME = "#ee82ee" // violet
 let COLOUR_ERROR = "#ff6347" // tomato
 
 [<Literal>]
+let COLOUR_SUMMARY = "#f0fff0" // honeydew
+
+[<Literal>]
+let COLOUR_REMOVE = "#ffa07a" // lightsalmon
+
+[<Literal>]
 let COLOUR_DEBUG = "#dda0dd" // plum
 
 [<Literal>]
@@ -41,7 +47,7 @@ let COLOUR_DISABLED_TEXT = "#c0c0c0" // silver
 let FOLDER_SESSIONS = "sessions"
 
 [<Literal>]
-let FOLDER_PLAYLIST = "playlists"
+let FOLDER_PLAYLISTS = "playlists"
 // #endregion
 
 // #region File extensions

@@ -21,11 +21,15 @@ type ErrorId =
 
     static member Create() = ErrorId(Guid.NewGuid())
 
-type SavePreferencesRequestId =
-    | SavePreferencesRequestId of Guid
+type WritePreferencesRequestId =
+    | WritePreferencesRequestId of Guid
 
     static member Create() =
-        SavePreferencesRequestId(Guid.NewGuid())
+        WritePreferencesRequestId(Guid.NewGuid())
+
+type WritePreferencesRequestSource =
+    | App
+    | Player
 
 type State =
     { ShowingErrors: bool
@@ -33,8 +37,7 @@ type State =
       LastNormalSize: float * float
       LastNormalLocation: int * int
       LastWindowState: WindowState
-      SavePreferencesAppRequestIds: SavePreferencesRequestId list
-      SavePreferencesPlayerRequestIds: SavePreferencesRequestId list
+      WritePreferencesRequests: (WritePreferencesRequestId * WritePreferencesRequestSource) list
       PlaylistsState: Playlists.Model.State
       PlayerState: Player.Model.State }
 
@@ -53,11 +56,11 @@ let defaultPreferences =
       Muted = false
       Volume = 100 }
 
-let writePreferences (preferences: Preferences) =
-    async { return! write Preferences preferencesFile preferences }
-
 let readPreferences () =
     async { return! read<Preferences> Preferences preferencesFile }
+
+let writePreferences (preferences: Preferences) =
+    async { return! write Preferences preferencesFile preferences }
 
 let applicationNameAndVersion = $"{APPLICATION_NAME} ({APPLICATION_VERSION})"
 

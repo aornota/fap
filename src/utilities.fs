@@ -5,11 +5,6 @@ open System
 [<Measure>]
 type millisecond
 
-type TimeFormat =
-    | NoRounding
-    | RoundUp
-    | IncludeMilliseconds
-
 [<Literal>]
 let SECOND = 1000L<millisecond>
 
@@ -22,7 +17,7 @@ let MINUTES_PER_HOUR = 60L
 let private minute = SECOND * SECONDS_PER_MINUTE
 let private hour = minute * MINUTES_PER_HOUR
 
-let private formatTime timeFormat (value: int64<millisecond>) =
+let private formatTime roundUp (value: int64<millisecond>) =
     let hours = if value > hour then Some(value / hour) else None
 
     let value =
@@ -36,7 +31,7 @@ let private formatTime timeFormat (value: int64<millisecond>) =
     let milliseconds = value - (seconds * SECOND)
 
     let hours, minutes, seconds =
-        if timeFormat = RoundUp then
+        if roundUp then
             let seconds =
                 if milliseconds > (SECOND / 2L) then
                     seconds + 1L
@@ -67,31 +62,22 @@ let private formatTime timeFormat (value: int64<millisecond>) =
     let minutesPrefix = if minutes < 10 then "0" else ""
     let secondsPrefix = if seconds < 10 then "0" else ""
 
-    let minutesEtc =
-        if timeFormat = IncludeMilliseconds then
-            let millisecondsPrefix =
-                if milliseconds < 10L<millisecond> then "00"
-                else if milliseconds < 100L<millisecond> then "0"
-                else ""
-
-            $"{minutesPrefix}{minutes}:{secondsPrefix}{seconds}.{millisecondsPrefix}{milliseconds}"
-        else
-            $"{minutesPrefix}{minutes}:{secondsPrefix}{seconds}"
+    let minutesAndSeconds = $"{minutesPrefix}{minutes}:{secondsPrefix}{seconds}"
 
     match hours with
-    | Some hours -> $"{hours}:{minutesEtc}"
-    | None -> minutesEtc
+    | Some hours -> $"{hours}:{minutesAndSeconds}"
+    | None -> minutesAndSeconds
 
-let durationText timeFormat =
+let durationText =
     function
-    | Some duration -> formatTime timeFormat duration
+    | Some duration -> formatTime true duration
     | None -> "N/A"
 
 let positionText (positionValue: float32) (duration: int64<millisecond> option) =
     match duration with
     | Some duration ->
         let position = Math.Round((positionValue |> double) * (duration |> double)) |> int64
-        formatTime NoRounding (position * 1L<millisecond>)
+        formatTime false (position * 1L<millisecond>)
     | None -> "0:00"
 
 let playerVolume (volume: int) =
