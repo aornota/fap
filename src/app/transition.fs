@@ -11,7 +11,7 @@ open LibVLCSharp.Shared
 open System
 
 type Msg =
-    | UpdateTitle of TrackData * playlistName: string
+    | UpdateTitle
     | UpdateIcon
     | ToggleShowingErrors
     | AddError of string
@@ -46,16 +46,11 @@ let private makeError error =
 
 let private handlePlaylistsExternal msg =
     match msg with
-    | Playlists.Transition.ExternalMsg.RequestTrack (trackData, playlistName, hasPrevious, hasNext, play) ->
-        Cmd.batch
-            [ Cmd.ofMsg (
-                  PlayerMsg(
-                      Player.Transition.Msg.NotifyTrackRequested(trackData, playlistName, hasPrevious, hasNext, play)
-                  )
-              )
-              Cmd.ofMsg (UpdateTitle(trackData, playlistName)) ]
+    | Playlists.Transition.ExternalMsg.RequestTrack (trackData, hasPrevious, hasNext, play) ->
+        Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.NotifyTrackRequested(trackData, hasPrevious, hasNext, play)))
     | Playlists.Transition.ExternalMsg.RequestWriteSession -> Cmd.ofMsg WriteSession
-    | Playlists.Transition.ExternalMsg.RequestWritePreferences -> Cmd.ofMsg (WritePreferences Playlists)
+    | Playlists.Transition.ExternalMsg.RequestWritePreferences ->
+        Cmd.batch [ Cmd.ofMsg UpdateTitle; Cmd.ofMsg (WritePreferences Playlists) ]
     | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
 let private handlePlayerExternal msg =
@@ -137,9 +132,17 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     let noChange = state, Cmd.none
 
     match msg with
-    | UpdateTitle (trackData, playlistName) ->
-        window.Title <- $"{trackData.Name} | {playlistName} - {applicationNameAndVersion}"
-        noChange
+    | UpdateTitle ->
+        let trackAndPlaylist, cmd =
+            match state.PlaylistsState.PlayerStatus with
+            | Some (trackId, _) ->
+                match Playlists.Transition.findTrack state.PlaylistsState.Playlists trackId with
+                | Ok (playlist, trackData) -> $"{trackData.Name} | {playlist.Name} | ", Cmd.none
+                | Error error -> "", Cmd.ofMsg (AddError error)
+            | None -> "", Cmd.none
+
+        window.Title <- $"{trackAndPlaylist}{state.Session.Name} - {applicationNameAndVersion}"
+        state, cmd
     | UpdateIcon ->
         let playerStatus =
             match state.PlayerState.TrackState with

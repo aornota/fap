@@ -14,7 +14,6 @@ type PlayerState =
 
 type TrackState =
     { Track: TrackData
-      PlaylistName: string
       PlayerState: PlayerState
       HasPrevious: bool
       HasNext: bool }

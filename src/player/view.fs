@@ -91,7 +91,7 @@ let private trackDetails state =
     // TODO-NMB: Use "metadata" (if available)?...
     let details =
         match state with
-        | Some trackState -> $"{trackState.Track.Name} | {trackState.PlaylistName}"
+        | Some trackState -> trackState.Track.Name
         | None -> NO_SELECTED_TRACK
 
     TextBlock.create

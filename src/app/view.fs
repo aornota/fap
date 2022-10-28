@@ -112,7 +112,7 @@ let view state dispatch =
               TextBlock.horizontalAlignment HorizontalAlignment.Center
               TextBlock.textAlignment TextAlignment.Center
               TextBlock.fontSize 16.
-              TextBlock.padding (0, 5, 0, 5)
+              TextBlock.padding (0, 10, 0, 5)
               TextBlock.foreground COLOUR_INACTIVE
               TextBlock.text state.Session.Name ]
 

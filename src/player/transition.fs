@@ -31,12 +31,7 @@ type Msg =
     | Stop
     | ToggleMuted
     | Volume of int
-    | NotifyTrackRequested of
-        trackData: TrackData *
-        playlistName: string *
-        hasPrevious: bool *
-        hasNext: bool *
-        play: bool
+    | NotifyTrackRequested of trackData: TrackData * hasPrevious: bool * hasNext: bool * play: bool
     //| NotifyTrackContextUpdated of trackId: TrackId * playlistName: string * hasPrevious: bool * hasNext: bool
     | NotifyPlaying
     | NotifyPaused
@@ -208,7 +203,7 @@ let transition msg (state: State) (player: MediaPlayer) =
             externalMsgs
         else
             noChange
-    | NotifyTrackRequested (trackData, playlistName, hasPrevious, hasNext, play) ->
+    | NotifyTrackRequested (trackData, hasPrevious, hasNext, play) ->
         let tryNewStateAndCmd =
             match state.TrackState with
             | Some trackState ->
@@ -228,7 +223,6 @@ let transition msg (state: State) (player: MediaPlayer) =
                             TrackState =
                                 Some
                                     { Track = trackData
-                                      PlaylistName = playlistName
                                       PlayerState = (if play then AwaitingPlay else NoMedia)
                                       HasPrevious = hasPrevious
                                       HasNext = hasNext } },
@@ -243,7 +237,6 @@ let transition msg (state: State) (player: MediaPlayer) =
                         TrackState =
                             Some
                                 { Track = trackData
-                                  PlaylistName = playlistName
                                   PlayerState = (if play then AwaitingPlay else NoMedia)
                                   HasPrevious = hasPrevious
                                   HasNext = hasNext } },

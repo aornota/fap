@@ -18,11 +18,11 @@ open Avalonia.Themes.Fluent
 open LibVLCSharp.Shared
 open System
 
-type AppWindow(preferences, session, startupErrors) as this =
+type AppWindow(preferences, session: Session, startupErrors) as this =
     inherit HostWindow()
 
     do
-        base.Title <- applicationNameAndVersion
+        base.Title <- $"{session.Name} | {applicationNameAndVersion}"
 
         base.Icon <- applicationIcon Inactive preferences.Muted
         base.MinWidth <- MIN_WIDTH
