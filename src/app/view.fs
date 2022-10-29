@@ -19,38 +19,102 @@ let private NO_ERRORS = "- no errors -"
 [<Literal>]
 let private TIMESTAMP_FORMAT = "yyyy-MM-dd 'at' HH:mm:ss.fff"
 
+// TODO-NMB: Add icons (e.g. MenuItem.icon (Image.FromImageAsset "select-files.png"))?...
 let private menu state dispatch =
-    let showOrHideErrorsText, showOrHideErrorsColour =
-        if state.ShowingErrors then
-            "Hide", COLOUR_INACTIVE
-        else
-            "Show", COLOUR_ACTIVE
+    let sessionMenu =
+        let canChangeSession =
+            match state.WriteSessionRequests, state.WritePreferencesRequests with
+            | [], [] -> true
+            | _ -> false
+
+        let sessionItem (summary: SessionSummary) =
+            let name =
+                let extra =
+                    if isDebug then
+                        let (SessionId guid) = summary.SessionId
+                        $" [{guid}]"
+                    else
+                        ""
+
+                let plural = if summary.PlaylistCount <> 1 then "s" else ""
+
+                $"{summary.Name} ({summary.PlaylistCount} playlist{plural}){extra}"
+
+            MenuItem.create
+                [ MenuItem.header name
+                  MenuItem.fontSize 12.
+                  MenuItem.isEnabled (summary.SessionId <> state.Session.Id)
+                  // TODO-NMB: Seems to trigger twice? And sometimes with wrong SessionId (e.g. after adding new Session)?...
+                  MenuItem.onClick (fun args -> dispatch (OpenSession summary.SessionId)) ]
+            :> IView
+
+        let sessionItems =
+            state.SessionSummaries
+            |> List.sortBy (fun summary -> summary.Name)
+            |> List.map sessionItem
+
+        let settingsMenu =
+            MenuItem.create
+                [ MenuItem.header "Settings"
+                  MenuItem.fontSize 12.
+                  MenuItem.viewItems
+                      [ MenuItem.create
+                            [ MenuItem.header (
+                                  if state.AutoPlaySession then
+                                      "Disable auto-play"
+                                  else
+                                      "Enable auto-play"
+                              )
+                              MenuItem.fontSize 12.
+                              MenuItem.onClick (fun _ -> dispatch ToggleAutoPlaySession) ] ] ]
+
+        MenuItem.create
+            [ MenuItem.header "Session"
+              MenuItem.fontSize 12.
+              MenuItem.viewItems
+                  [ MenuItem.create
+                        [ MenuItem.header "New"
+                          MenuItem.fontSize 12.
+                          MenuItem.isEnabled canChangeSession
+                          MenuItem.onClick (fun _ -> dispatch NewSession) ]
+                    MenuItem.create
+                        [ MenuItem.header "Open"
+                          MenuItem.fontSize 12.
+                          MenuItem.isEnabled (canChangeSession && sessionItems.Length > 1)
+                          MenuItem.viewItems sessionItems ]
+                    settingsMenu ] ]
+
+    // TODO-NMB: playlist(s)Menu...
+
+    let debugMenu =
+        MenuItem.create
+            [ MenuItem.header "Debug"
+              MenuItem.fontSize 12.
+              MenuItem.foreground COLOUR_DEBUG
+              MenuItem.viewItems
+                  [ MenuItem.create
+                        [ MenuItem.header $"Errors ({state.Errors.Length})"
+                          MenuItem.fontSize 12.
+                          MenuItem.foreground COLOUR_ERROR
+                          MenuItem.isEnabled (state.Errors.Length > 0 || state.ShowingErrors)
+                          MenuItem.viewItems
+                              [ MenuItem.create
+                                    [ MenuItem.header (if state.ShowingErrors then "Hide" else "Show")
+                                      MenuItem.fontSize 12.
+                                      MenuItem.onClick (fun _ -> dispatch ToggleShowingErrors) ]
+                                MenuItem.create
+                                    [ MenuItem.header "Clear all"
+                                      MenuItem.fontSize 12.
+                                      MenuItem.foreground COLOUR_REMOVE
+                                      MenuItem.isEnabled (state.Errors.Length > 0)
+                                      MenuItem.onClick (fun _ -> dispatch ClearAllErrors) ] ] ] ] ]
 
     Menu.create
         [ Menu.dock Dock.Top
           Menu.viewItems
-              [ MenuItem.create
-                    [ MenuItem.header "Debug"
-                      MenuItem.fontSize 12.
-                      MenuItem.foreground COLOUR_DEBUG
-                      MenuItem.viewItems
-                          [ MenuItem.create
-                                [ MenuItem.header $"Errors ({state.Errors.Length})"
-                                  MenuItem.fontSize 12.
-                                  MenuItem.foreground COLOUR_ERROR
-                                  // If want an "icon"...MenuItem.icon (Image.FromImageAsset "select-files.png")
-                                  MenuItem.viewItems
-                                      [ MenuItem.create
-                                            [ MenuItem.header showOrHideErrorsText
-                                              MenuItem.fontSize 12.
-                                              MenuItem.foreground showOrHideErrorsColour
-                                              MenuItem.onClick (fun _ -> dispatch ToggleShowingErrors) ]
-                                        MenuItem.create
-                                            [ MenuItem.header "Clear all"
-                                              MenuItem.fontSize 12.
-                                              MenuItem.foreground COLOUR_REMOVE
-                                              MenuItem.isEnabled (state.Errors.Length > 0)
-                                              MenuItem.onClick (fun _ -> dispatch ClearAllErrors) ] ] ] ] ] ] ]
+              [ sessionMenu
+                if isDebug then
+                    debugMenu ] ]
 
 let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
     let errorTemplate (errorId, timestamp: DateTime, message) =
@@ -126,8 +190,7 @@ let view state dispatch =
           DockPanel.horizontalAlignment HorizontalAlignment.Stretch
           DockPanel.lastChildFill (state.PlaylistsState.Playlists.Length > 0)
           DockPanel.children
-              [ if isDebug then
-                    menu state dispatch
+              [ menu state dispatch
                 if isDebug && state.ShowingErrors then
                     errorsView state.Errors dispatch
                 session

@@ -134,6 +134,7 @@ let private playlistTab selectedPlaylistId (playerStatus: (TrackId * PlayerStatu
           TabItem.fontSize 13.
           TabItem.isSelected (Some playlist.Id = selectedPlaylistId)
           TabItem.content content
+          // TODO-NMB: Seems to trigger for first tab even if not selected?...
           TabItem.onIsSelectedChanged (fun selected ->
               if selected then
                   dispatch (SelectPlaylist playlist.Id)) ]

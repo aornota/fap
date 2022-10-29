@@ -82,8 +82,19 @@ let write persistenceType name (data: 'a) =
             return Error $"Persistence.write -> {exn.Message}"
     }
 
-let list persistenceType =
-    Directory.EnumerateFiles((folder persistenceType).FullName, $"*.{fileExtension persistenceType}")
+let listNamesWithoutExtension persistenceType =
+    let nameWithoutExtension (name: string) extensionLength =
+        match name.Length with
+        | length when length > extensionLength -> Some(name.Substring(0, length - extensionLength))
+        | _ -> None
+
+    let extension = fileExtension persistenceType
+    let extensionLength = extension.Length + 1
+
+    Directory.EnumerateFiles((folder persistenceType).FullName, $"*.{extension}")
+    |> List.ofSeq
+    |> List.map FileInfo
+    |> List.choose (fun file -> nameWithoutExtension file.Name extensionLength)
 
 let readErrorText =
     function

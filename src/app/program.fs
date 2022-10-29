@@ -2,9 +2,11 @@ module Aornota.Fap.App.Program
 
 open Aornota.Fap
 open Aornota.Fap.App.Model
+open Aornota.Fap.App.Preferences
 open Aornota.Fap.App.Transition
 open Aornota.Fap.App.View
 open Aornota.Fap.Domain
+open Aornota.Fap.Literals
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Elmish
@@ -18,17 +20,17 @@ open Avalonia.Themes.Fluent
 open LibVLCSharp.Shared
 open System
 
-type AppWindow(preferences, session: Session, startupErrors) as this =
+type AppWindow(preferences, session: Session, sessionIds, playlistIds, startupErrors) as this =
     inherit HostWindow()
 
     do
         base.Title <- $"{session.Name} | {applicationNameAndVersion}"
 
-        base.Icon <- applicationIcon Inactive preferences.Muted
-        base.MinWidth <- MIN_WIDTH
-        base.MinHeight <- MIN_HEIGHT
-        base.Width <- Math.Max(fst preferences.NormalSize, MIN_WIDTH)
-        base.Height <- Math.Max(snd preferences.NormalSize, MIN_HEIGHT)
+        base.Icon <- applicationIcon (Some Inactive) preferences.Muted
+        base.MinWidth <- WINDOW_MINIMUM_WIDTH
+        base.MinHeight <- WINDOW_MINIMUM_HEIGHT
+        base.Width <- Math.Max(fst preferences.NormalSize, WINDOW_MINIMUM_WIDTH)
+        base.Height <- Math.Max(snd preferences.NormalSize, WINDOW_MINIMUM_HEIGHT)
         base.Position <- PixelPoint(fst preferences.NormalLocation, snd preferences.NormalLocation)
         base.WindowState <- preferences.WindowState
         this.SystemDecorations <- SystemDecorations.Full
@@ -40,7 +42,8 @@ type AppWindow(preferences, session: Session, startupErrors) as this =
         player.Mute <- preferences.Muted
         player.Volume <- playerVolume preferences.Volume
 
-        let init _ = init preferences session startupErrors
+        let init _ =
+            init preferences session sessionIds playlistIds startupErrors
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif
@@ -76,15 +79,6 @@ type App() =
                 | Ok _ -> []
                 | Error error -> [ $"Program.writeDefaultPreferences -> {error}" ]
 
-            let defaultPreferences =
-                { NormalSize = MIN_WIDTH, MIN_HEIGHT
-                  NormalLocation = 0, 0
-                  WindowState = WindowState.Normal
-                  LastSessionId = None
-                  LastTrackId = None
-                  Muted = false
-                  Volume = 100 }
-
             let preferences, startupErrors =
                 match readPreferences () |> Async.RunSynchronously with
                 | Ok preferences -> preferences, []
@@ -96,10 +90,7 @@ type App() =
                 | Ok _ -> []
                 | Error error -> [ $"Program.writeDefaultSession -> {error}" ]
 
-            let defaultSession =
-                { Id = SessionId.Create()
-                  Name = NEW_SESSION
-                  PlaylistIds = [] }
+            let defaultSession = newSession ()
 
             let session, startupErrors =
                 match preferences.LastSessionId with
@@ -111,7 +102,21 @@ type App() =
                         defaultSession, writeDefaultSession defaultSession @ [ error ] @ startupErrors
                 | None -> defaultSession, startupErrors
 
-            desktopLifetime.MainWindow <- AppWindow(preferences, session, startupErrors)
+            let sessionIds =
+                listNamesWithoutExtension Session
+                |> List.choose (fun name ->
+                    match Guid.TryParse(name) with
+                    | true, guid -> Some(SessionId guid)
+                    | _ -> None)
+
+            let playlistIds =
+                listNamesWithoutExtension Playlist
+                |> List.choose (fun name ->
+                    match Guid.TryParse(name) with
+                    | true, guid -> Some(Playlists.Model.PlaylistId guid)
+                    | _ -> None)
+
+            desktopLifetime.MainWindow <- AppWindow(preferences, session, sessionIds, playlistIds, startupErrors)
         | _ -> ()
 
 [<EntryPoint>]

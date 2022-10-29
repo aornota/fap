@@ -7,21 +7,25 @@ open Aornota.Fap.Utilities
 open Elmish
 
 type ExternalMsg =
+    // For Player
     | RequestTrack of trackData: TrackData * hasPrevious: bool * hasNext: bool * play: bool
+    | RequestNoTrack
+    // For App
     | NotifyPlaylistsChanged
     | NotifyPlayerStatusChanged
     | NotifyError of string
 
 type Msg =
-    | ReadPlaylists of PlaylistId list * TrackId option
-    | PlaylistRead of Playlist * PlaylistId list * TrackId option
-    | ReadPlaylistError of ReadError * PlaylistId * PlaylistId list * TrackId option
+    // Internal
+    | ReadPlaylists of PlaylistId list * TrackId option * bool * Playlist list
+    | ReadPlaylistError of ReadError * PlaylistId * PlaylistId list * TrackId option * bool * Playlist list
     | WritePlaylist of PlaylistId
     | DebounceWritePlaylistRequest of WritePlaylistRequestId * PlaylistId
     | WritePlaylistError of string * PlaylistId
     | SelectPlaylist of PlaylistId
     | PlayTrack of TrackId
     | NoOp
+    // From Player
     | NotifyRequestPrevious of TrackId * bool
     | NotifyRequestNext of TrackId * bool
     | NotifyPlaying of TrackId * int64<millisecond>
@@ -71,20 +75,6 @@ let private hasPreviousAndOrNext playlist trackId =
     | Ok (None, Some _) -> Ok(false, true)
     | Ok (None, None) -> Ok(false, false)
     | Error error -> Error error
-
-let private defaultTrack playlists externalMsgs =
-    match playlists with
-    | playlist :: _ ->
-        match tracks playlist with
-        | trackData :: _ ->
-            match hasPreviousAndOrNext playlist trackData.Id with
-            | Ok (hasPrevious, hasNext) ->
-                Some playlist.Id,
-                Some(trackData.Id, Inactive),
-                RequestTrack(trackData, hasPrevious, hasNext, false) :: externalMsgs
-            | Error error -> None, None, NotifyError $"Playlists.transition -> {error}" :: externalMsgs
-        | [] -> None, None, externalMsgs
-    | [] -> None, None, externalMsgs
 
 let private updatePlaylist playlist (trackData: TrackData) =
     let mutable updated = 0
@@ -148,15 +138,17 @@ let findTrack playlists trackId =
     | [] -> Error $"no matches for {trackId}"
     | _ -> Error $"matches for {trackId} for multiple {nameof (Playlist)}s"
 
-let init playlistIds lastTrackId = // TODO-NMB: Option to "auto-play" lastTrackId?...
+let init playlistIds lastTrackId autoPlay =
     { Playlists = []
       SelectedPlaylistId = None
       PlayerStatus = None
       WritePlaylistRequests = [] },
-    ReadPlaylists(playlistIds, lastTrackId)
+    ReadPlaylists(playlistIds, lastTrackId, autoPlay, [])
 
-// TODO-NMB: If change TrackId for PlayerStatus - or if set PlayerStatus to None [or Some(_, Errored)]- call (external) NotifyPlayerStatusChanged...
+// TODO-NMB: If change TrackId for PlayerStatus - or set PlayerStatus to None [or to Some(_, Errored)] - call (external) NotifyPlayerStatusChanged...
 // TODO-NMB: If add / remove / reorder Playlists, call (external) NotifyPlaylistsChanged...
+// TODO-NMB: If add new Playlist, call (external) NewPlaylistAdded?...
+// TODO-NMB: If add / remove / reorder Playlist items, call WritePlaylist...
 let transition msg state =
     let notifyError error =
         state, Cmd.none, [ NotifyError $"Playlists.transition -> {error}" ]
@@ -164,7 +156,7 @@ let transition msg state =
     let noChange = state, Cmd.none, []
 
     match msg with
-    | ReadPlaylists (playlistIds, lastTrackId) ->
+    | ReadPlaylists (playlistIds, lastTrackId, autoPlay, playlists) ->
         match playlistIds with
         | playlistId :: playlistIds ->
             let read () =
@@ -172,20 +164,22 @@ let transition msg state =
 
             let handleResult =
                 function
-                | Ok playlist -> PlaylistRead(playlist, playlistIds, lastTrackId)
-                | Error error -> ReadPlaylistError(error, playlistId, playlistIds, lastTrackId)
+                | Ok playlist ->
+                    ReadPlaylists(playlistIds, lastTrackId, autoPlay, (playlist :: (playlists |> List.rev)) |> List.rev)
+                | Error error -> ReadPlaylistError(error, playlistId, playlistIds, lastTrackId, autoPlay, playlists)
 
             state, Cmd.OfAsync.perform read () handleResult, []
         | [] ->
             let lastTrack =
                 match lastTrackId with
                 | Some lastTrackId ->
-                    match findTrack state.Playlists lastTrackId with
+                    match findTrack playlists lastTrackId with
                     | Ok (playlist, trackData) ->
                         match hasPreviousAndOrNext playlist trackData.Id with
                         | Ok (hasPrevious, hasNext) ->
                             Some(playlist.Id, (trackData.Id, Inactive)),
-                            [ RequestTrack(trackData, hasPrevious, hasNext, false) ]
+                            [ NotifyPlayerStatusChanged
+                              RequestTrack(trackData, hasPrevious, hasNext, autoPlay) ]
                         | Error error -> None, [ NotifyError $"Playlists.transition -> {error}" ]
                     | Error error -> None, [ NotifyError $"Playlists.transition -> {error}" ]
                 | None -> None, []
@@ -196,23 +190,39 @@ let transition msg state =
                     Some(fst selectedPlaylistIdAndPlayerStatus),
                     Some(snd selectedPlaylistIdAndPlayerStatus),
                     externalMsgs
-                | (None, externalMsgs) -> defaultTrack state.Playlists externalMsgs
+                | (None, externalMsgs) ->
+                    let playlistsWithTracks =
+                        playlists
+                        |> List.choose (fun playlist ->
+                            match tracks playlist with
+                            | trackData :: _ -> Some(playlist, trackData)
+                            | [] -> None)
+
+                    match playlistsWithTracks with
+                    | (playlist, trackData) :: _ ->
+                        match hasPreviousAndOrNext playlist trackData.Id with
+                        | Ok (hasPrevious, hasNext) ->
+                            Some playlist.Id,
+                            Some(trackData.Id, Inactive),
+                            NotifyPlayerStatusChanged
+                            :: RequestTrack(trackData, hasPrevious, hasNext, autoPlay) :: externalMsgs
+                        | Error error ->
+                            None,
+                            None,
+                            NotifyPlayerStatusChanged
+                            :: RequestNoTrack :: NotifyError $"Playlists.transition -> {error}" :: externalMsgs
+                    | [] -> None, None, NotifyPlayerStatusChanged :: RequestNoTrack :: externalMsgs
 
             { state with
+                Playlists = playlists
                 SelectedPlaylistId = selectedPlaylistId
                 PlayerStatus = playerStatus },
             Cmd.none,
-            NotifyPlayerStatusChanged :: externalMsgs
-    | PlaylistRead (playlist, playlistIds, lastTrackId) ->
-        let newPlaylists = (playlist :: (state.Playlists |> List.rev)) |> List.rev
-
-        { state with Playlists = newPlaylists },
-        Cmd.ofMsg (ReadPlaylists(playlistIds, lastTrackId)),
-        [ NotifyPlaylistsChanged ]
-    | ReadPlaylistError (readError, PlaylistId guid, playlistIds, lastTrackId) ->
+            NotifyPlaylistsChanged :: externalMsgs
+    | ReadPlaylistError (readError, PlaylistId guid, playlistIds, lastTrackId, autoPlay, playlists) ->
         state,
-        Cmd.ofMsg (ReadPlaylists(playlistIds, lastTrackId)),
-        [ NotifyError $"Playlists.transition -> Unable to read playlist ({guid}): {readErrorText readError}" ]
+        Cmd.ofMsg (ReadPlaylists(playlistIds, lastTrackId, autoPlay, playlists)),
+        [ NotifyError $"Playlists.transition -> Unable to read {nameof (Playlist)} ({guid}): {readErrorText readError}" ]
     | WritePlaylist playlistId ->
         let writePlaylistRequest = WritePlaylistRequestId.Create(), playlistId
 
@@ -277,8 +287,8 @@ let transition msg state =
 
                     { state with PlayerStatus = Some(previous.Id, playerStatus) },
                     Cmd.none,
-                    [ RequestTrack(previous, hasPrevious, hasNext, play)
-                      NotifyPlayerStatusChanged ]
+                    [ NotifyPlayerStatusChanged
+                      RequestTrack(previous, hasPrevious, hasNext, play) ]
                 | Error error -> notifyError $"{nameof (NotifyRequestPrevious)}: {error}"
             | Ok (None, _) ->
                 notifyError
@@ -296,7 +306,7 @@ let transition msg state =
 
                     { state with PlayerStatus = Some(next.Id, playerStatus) },
                     Cmd.none,
-                    [ RequestTrack(next, hasPrevious, hasNext, play); NotifyPlayerStatusChanged ]
+                    [ NotifyPlayerStatusChanged; RequestTrack(next, hasPrevious, hasNext, play) ]
                 | Error error -> notifyError $"{nameof (NotifyRequestNext)}: {error}"
             | Ok (_, None) ->
                 notifyError

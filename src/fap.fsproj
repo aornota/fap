@@ -22,6 +22,7 @@
     <Compile Include="player\transition.fs" />
     <Compile Include="player\view.fs" />
     <Compile Include="app\model.fs" />
+    <Compile Include="app\preferences.fs" />
     <Compile Include="app\transition.fs" />
     <Compile Include="app\view.fs" />
     <Compile Include="app\subscriptions.fs" />

@@ -16,16 +16,18 @@ type SessionId =
 type Session =
     { Id: SessionId
       Name: string
-      PlaylistIds: Playlists.Model.PlaylistId list }
+      PlaylistIds: Playlists.Model.PlaylistId list
+      LastTrackId: TrackId option }
 
-type Preferences = // TODO-NMB: LastAudioFolder?...
-    { NormalSize: float * float
-      NormalLocation: int * int
-      WindowState: WindowState
-      LastSessionId: SessionId option
-      LastTrackId: TrackId option
-      Muted: bool
-      Volume: int }
+type SessionSummary =
+    { SessionId: SessionId
+      Name: string
+      PlaylistCount: int }
+
+type PlaylistSummary =
+    { PlaylistId: Playlists.Model.PlaylistId
+      Name: string
+      TrackCount: int }
 
 type ErrorId =
     | ErrorId of Guid
@@ -44,13 +46,15 @@ type WritePreferencesRequestId =
         WritePreferencesRequestId(Guid.NewGuid())
 
 type WritePreferencesRequestSource =
-    | AppWindow
-    | AppSession
-    | Playlists
+    | Host
+    | App
     | Player
 
 type State =
     { Session: Session
+      SessionSummaries: SessionSummary list
+      PlaylistSummaries: PlaylistSummary list
+      AutoPlaySession: bool
       ShowingErrors: bool
       Errors: (ErrorId * DateTime * string) list
       LastNormalSize: float * float
@@ -62,18 +66,15 @@ type State =
       PlayerState: Player.Model.State }
 
 [<Literal>]
-let MIN_WIDTH = 800.
-
-[<Literal>]
-let MIN_HEIGHT = 600.
-
-[<Literal>]
 let NEW_SESSION = "new session"
 
-let private preferencesFile =
-    $"{Environment.UserName.ToLowerInvariant()}.{fileExtension Preferences}"
-
 let private sessionFile (SessionId guid) = $"{guid}.{fileExtension Session}"
+
+let newSession () =
+    { Id = SessionId.Create()
+      Name = NEW_SESSION
+      PlaylistIds = []
+      LastTrackId = None }
 
 let readSession sessionId =
     async { return! read<Session> Session (sessionFile sessionId) }
@@ -81,21 +82,16 @@ let readSession sessionId =
 let writeSession session =
     async { return! write Session (sessionFile session.Id) session }
 
-let readPreferences () =
-    async { return! read<Preferences> Preferences preferencesFile }
-
-let writePreferences (preferences: Preferences) =
-    async { return! write Preferences preferencesFile preferences }
-
-let applicationNameAndVersion = $"{APPLICATION_NAME} ({APPLICATION_VERSION})"
-
 let applicationIcon playerStatus muted =
     let variant =
         match playerStatus with
-        | Active -> "active"
-        | Awaiting -> "awaiting"
-        | Inactive -> "inactive"
-        | Errored -> "errored"
+        | Some Active -> "active"
+        | Some Awaiting -> "awaiting"
+        | Some Inactive -> "inactive"
+        | Some Errored -> "errored"
+        | None -> "disabled"
 
     let muted = if muted then "-muted" else ""
     WindowIcon(Bitmap.FromImageAsset($"fap-{variant}{muted}.png"))
+
+let applicationNameAndVersion = $"{APPLICATION_NAME} ({APPLICATION_VERSION})"

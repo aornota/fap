@@ -10,14 +10,14 @@ open System
 // #region HostWindow subscription
 let locationChanged (window: HostWindow) =
     let sub dispatch =
-        window.PositionChanged.Subscribe(fun _ -> dispatch (Transition.Msg.WritePreferences AppWindow))
+        window.PositionChanged.Subscribe(fun _ -> dispatch Transition.Msg.LocationChanged)
         |> ignore
 
     Cmd.ofSub sub
 
 let effectiveViewportChanged (window: HostWindow) =
     let sub dispatch =
-        window.EffectiveViewportChanged.Subscribe(fun _ -> dispatch (Transition.Msg.WritePreferences AppWindow))
+        window.EffectiveViewportChanged.Subscribe(fun _ -> dispatch Transition.Msg.EffectiveViewportChanged)
         |> ignore
 
     Cmd.ofSub sub

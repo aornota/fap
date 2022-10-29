@@ -74,3 +74,11 @@ let FILE_EXTENSION_WAV = "wav"
 [<Literal>]
 let SIZE_BUTTON_WITH_ICON = 30.
 // #endregion
+
+// #region Window
+[<Literal>]
+let WINDOW_MINIMUM_WIDTH = 800.
+
+[<Literal>]
+let WINDOW_MINIMUM_HEIGHT = 600.
+// #endregion

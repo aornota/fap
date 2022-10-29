@@ -10,18 +10,23 @@ open System
 open System.IO
 
 type ExternalMsg =
-    | RequestPrevious of trackId: TrackId * play: bool
-    | RequestNext of trackId: TrackId * play: bool
-    | NotifyPlaying of trackId: TrackId * duration: int64<millisecond>
-    | NotifyPaused of trackId: TrackId
-    | NotifyStopped of trackId: TrackId
-    | NotifyEnded of trackId: TrackId
-    | NotifyPlaybackErrored of trackId: TrackId
+    // For Playlists
+    | RequestPrevious of TrackId * play: bool
+    | RequestNext of TrackId * play: bool
+    | NotifyPlaying of TrackId * duration: int64<millisecond>
+    | NotifyPaused of TrackId
+    | NotifyStopped of TrackId
+    | NotifyEnded of TrackId
+    | NotifyPlaybackErrored of TrackId
+    // For App
+    | NotifyTrack
+    | NotifyNoTrack
     | NotifyMutedToggled
     | NotifyVolumeChanged
     | NotifyError of string
 
 type Msg =
+    // Internal
     | Seek of float32
     | DebounceSeekRequest of SeekRequestId * float32
     | Previous
@@ -31,8 +36,11 @@ type Msg =
     | Stop
     | ToggleMuted
     | Volume of int
+    // From Playlists
     | NotifyTrackRequested of trackData: TrackData * hasPrevious: bool * hasNext: bool * play: bool
     // TODO-NMB...| NotifyTrackContextUpdated of trackId: TrackId * playlistName: string * hasPrevious: bool * hasNext: bool
+    // From App
+    | NotifyNoTrackRequested
     | NotifyPlaying
     | NotifyPaused
     | NotifyStopped
@@ -244,7 +252,7 @@ let transition msg (state: State) (player: MediaPlayer) =
                 )
 
         match tryNewStateAndCmd with
-        | Ok (newState, cmd) -> newState, cmd, []
+        | Ok (newState, cmd) -> newState, cmd, [ NotifyTrack ]
         | Error error -> notifyError error
     (* TODO-NMB...| NotifyTrackContextUpdated (trackId, playlistName, hasPrevious, hasNext) ->
         match state.TrackState with
@@ -261,6 +269,14 @@ let transition msg (state: State) (player: MediaPlayer) =
         | _ ->
             // TODO-NMB: Should this be an error?...
             noChange *)
+    | NotifyNoTrackRequested ->
+        player.Media <- null
+
+        { state with
+            TrackState = None
+            SeekRequests = [] },
+        Cmd.none,
+        [ NotifyNoTrack ]
     | NotifyPlaying ->
         match state.TrackState with
         | Some trackState ->

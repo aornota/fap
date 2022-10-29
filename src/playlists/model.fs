@@ -34,6 +34,11 @@ let NEW_PLAYLIST = "new playlist"
 
 let private playlistFile (PlaylistId guid) = $"{guid}.{fileExtension Playlist}"
 
+let newPLaylist () =
+    { Id = PlaylistId.Create()
+      Name = NEW_PLAYLIST
+      Items = [] }
+
 let readPlaylist playlistId =
     async { return! read<Playlist> Playlist (playlistFile playlistId) }
 
