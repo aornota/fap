@@ -119,11 +119,6 @@ let private updatePlaylists (playlists: Playlist list) (playlist: Playlist) =
     else
         Error $"multiple matches for {playlist.Id} for {nameof (Playlist)}s"
 
-let private isPlaying =
-    function
-    | Playing _ -> true
-    | _ -> false
-
 let private playTrack track (player: MediaPlayer) =
     let path = Path.Combine(track.Folder, track.Name)
     use libvlc = new LibVLC()
@@ -387,9 +382,12 @@ let transition msg state (player: MediaPlayer) =
                 | Ok (Some previous, _) ->
                     match hasPreviousAndNext playlist previous.Id with
                     | Ok (hasPrevious, hasNext) ->
-                        state,
-                        Cmd.ofMsg (RequestTrack(previous, hasPrevious, hasNext, isPlaying trackState.PlayerState)),
-                        []
+                        let play =
+                            match trackState.PlayerState with
+                            | Playing _ -> true
+                            | _ -> false
+
+                        state, Cmd.ofMsg (RequestTrack(previous, hasPrevious, hasNext, play)), []
                     | Error error -> notifyError $"{nameof (OnPrevious)}: {error}"
                 | Ok (None, _) ->
                     notifyError
@@ -407,10 +405,14 @@ let transition msg state (player: MediaPlayer) =
                 | Ok (_, Some next) ->
                     match hasPreviousAndNext playlist next.Id with
                     | Ok (hasPrevious, hasNext) ->
-                        state,
-                        Cmd.ofMsg (RequestTrack(next, hasPrevious, hasNext, isPlaying trackState.PlayerState)),
-                        []
-                    | Error error -> notifyError $"{nameof (OnPrevious)}: {error}"
+                        let play =
+                            match trackState.PlayerState with
+                            | Playing _
+                            | Ended -> true
+                            | _ -> false
+
+                        state, Cmd.ofMsg (RequestTrack(next, hasPrevious, hasNext, play)), []
+                    | Error error -> notifyError $"{nameof (OnNext)}: {error}"
                 | Ok (_, None) ->
                     notifyError
                         $"{nameof (OnNext)}: no next track for {trackData.Id} for {nameof (Playlist)} {playlist.Name}"
