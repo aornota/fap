@@ -3,7 +3,6 @@ module Aornota.Fap.App.Transition
 open Aornota.Fap
 open Aornota.Fap.App.Model
 open Aornota.Fap.App.Preferences
-open Aornota.Fap.Domain
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Avalonia.Controls
@@ -14,6 +13,7 @@ open System
 
 type Msg =
     // Internal
+    | NoOp
     | ReadSessions of SessionId list * SessionSummary list
     | ReadSessionError of ReadError * SessionId * SessionId list * SessionSummary list
     | ReadPlaylists of Playlists.Model.PlaylistId list * PlaylistSummary list
@@ -24,8 +24,6 @@ type Msg =
         PlaylistSummary list
     | UpdateTitle
     | UpdateIcon
-    | NewSession
-    | OpenSession of SessionId
     | SessionOpened of Session
     // NewPlaylistAdded
     | ToggleAutoPlaySession
@@ -33,29 +31,23 @@ type Msg =
     | AddError of string
     | ClearError of ErrorId
     | ClearAllErrors
-    | WriteSession
-    | DebounceWriteSessionRequest of WriteSessionRequestId
+    | WriteSession of WriteSessionRequestSource
+    | DebounceWriteSessionRequest of WriteSessionRequestId * WriteSessionRequestSource
     | WritePreferences of WritePreferencesRequestSource
     | DebounceWritePreferencesRequest of WritePreferencesRequestId * WritePreferencesRequestSource
-    (* | OpenFiles
-    | OpenFolder
-    | AfterSelectFolder of string
-    | AfterSelectFiles of string array *)
-    | NoOp
+    // UI
+    | OnNewSession
+    | OnOpenSession of SessionId
     // From Playlists
     | PlaylistsMsg of Playlists.Transition.Msg
-    // From Player
-    | PlayerMsg of Player.Transition.Msg
     // From HostWindow subscriptions
     | LocationChanged
     | EffectiveViewportChanged
     // From MediaPlayer subscriptions
-    | PlayerPlaying
-    | PlayerPaused
-    | PlayerStopped
-    | PlayerEnded
-    | PlayerPositionChanged of float32
     | PlayerErrored
+    | PlayerPlaying
+    | PlayerPositionChanged of float32
+    | PlayerEnded
 
 [<Literal>]
 let private DEBOUNCE_WRITE_SESSION_REQUEST_DELAY = 250
@@ -66,53 +58,42 @@ let private DEBOUNCE_WRITE_PREFERENCES_REQUEST_DELAY = 250
 let private makeError error =
     ErrorId.Create(), DateTime.UtcNow, error
 
+let private sessionSummary (session: Session) =
+    { SessionId = session.Id
+      Name = session.Name
+      PlaylistCount = session.PlaylistIds.Length }
+
+let private playlistSummary (playlist: Playlists.Model.Playlist) =
+    { PlaylistId = playlist.Id
+      Name = playlist.Name
+      TrackCount = Playlists.Model.tracks playlist |> List.length }
+
+let private handleResult =
+    function
+    | Ok _ -> NoOp
+    | Error error -> AddError error
+
 let private handlePlaylistsExternal msg =
     match msg with
-    | Playlists.Transition.ExternalMsg.RequestTrack (trackData, hasPrevious, hasNext, play) ->
-        Cmd.ofMsg (PlayerMsg(Player.Transition.Msg.NotifyTrackRequested(trackData, hasPrevious, hasNext, play)))
-    | Playlists.Transition.ExternalMsg.RequestNoTrack ->
-        Cmd.ofMsg (PlayerMsg Player.Transition.Msg.NotifyNoTrackRequested)
-    | Playlists.Transition.ExternalMsg.NotifyPlaylistsChanged -> Cmd.ofMsg WriteSession
-    | Playlists.Transition.ExternalMsg.NotifyPlayerStatusChanged ->
-        Cmd.batch [ Cmd.ofMsg UpdateTitle; Cmd.ofMsg WriteSession ]
-    | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
-
-let private handlePlayerExternal msg =
-    match msg with
-    | Player.Transition.ExternalMsg.RequestPrevious (trackId, play) ->
-        Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyRequestPrevious(trackId, play)))
-    | Player.Transition.ExternalMsg.RequestNext (trackId, play) ->
-        Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyRequestNext(trackId, play)))
-    | Player.Transition.ExternalMsg.NotifyTrack
-    | Player.Transition.ExternalMsg.NotifyNoTrack -> Cmd.ofMsg UpdateIcon
-    | Player.Transition.ExternalMsg.NotifyPlaying (trackId, duration) ->
+    | Playlists.Transition.ExternalMsg.NotifyPlaylistsChanged -> Cmd.ofMsg (WriteSession PlaylistsChanged)
+    | Playlists.Transition.ExternalMsg.NotifyTrackStateChanged ->
         Cmd.batch
-            [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyPlaying(trackId, duration)))
-              Cmd.ofMsg UpdateIcon ]
-    | Player.Transition.ExternalMsg.NotifyPaused trackId ->
-        Cmd.batch
-            [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyPaused trackId))
-              Cmd.ofMsg UpdateIcon ]
-    | Player.Transition.ExternalMsg.NotifyStopped trackId ->
-        Cmd.batch
-            [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyStopped trackId))
-              Cmd.ofMsg UpdateIcon ]
-    | Player.Transition.ExternalMsg.NotifyEnded trackId ->
-        Cmd.batch
-            [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyEnded trackId))
-              Cmd.ofMsg UpdateIcon ]
-    | Player.Transition.ExternalMsg.NotifyPlaybackErrored trackId ->
-        Cmd.batch
-            [ Cmd.ofMsg (PlaylistsMsg(Playlists.Transition.Msg.NotifyPlaybackErrored trackId))
-              Cmd.ofMsg UpdateIcon ]
-    | Player.Transition.ExternalMsg.NotifyMutedToggled ->
+            [ Cmd.ofMsg UpdateTitle
+              Cmd.ofMsg UpdateIcon
+              Cmd.ofMsg (WriteSession TrackStateChanged) ]
+    | Playlists.Transition.ExternalMsg.NotifyMutedToggled ->
         Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg (WritePreferences Player) ]
-    | Player.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
-    | Player.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
+    | Playlists.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
+    | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
 let init preferences session sessionIds playlistIds (startupErrors: string list) =
     let playlistsState, playlistsMsg =
-        Playlists.Transition.init session.PlaylistIds session.LastTrackId preferences.AutoPlaySession
+        Playlists.Transition.init
+            session.PlaylistIds
+            session.LastTrackId
+            preferences.Muted
+            preferences.Volume
+            preferences.AutoPlaySession
 
     { Session = session
       SessionSummaries = []
@@ -125,51 +106,18 @@ let init preferences session sessionIds playlistIds (startupErrors: string list)
       LastWindowState = preferences.WindowState
       WriteSessionRequests = []
       WritePreferencesRequests = []
-      PlaylistsState = playlistsState
-      PlayerState = Player.Transition.init preferences.Muted preferences.Volume },
+      PlaylistsState = playlistsState },
     Cmd.batch
         [ Cmd.ofMsg (ReadSessions(sessionIds, []))
           Cmd.ofMsg (ReadPlaylists(playlistIds, []))
           Cmd.ofMsg (PlaylistsMsg playlistsMsg) ]
 
 let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
-    let sessionSummary (session: Session) =
-        { SessionId = session.Id
-          Name = session.Name
-          PlaylistCount = session.PlaylistIds.Length }
-
-    let playlistSummary (playlist: Playlists.Model.Playlist) =
-        { PlaylistId = playlist.Id
-          Name = playlist.Name
-          TrackCount = Playlists.Transition.tracks playlist |> List.length }
-
-    let preferences () =
-        let isNormal = window.WindowState = WindowState.Normal
-
-        { NormalSize =
-            if isNormal then
-                window.Width, window.Height
-            else
-                state.LastNormalSize
-          NormalLocation =
-            if isNormal then
-                window.Position.X, window.Position.Y
-            else
-                state.LastNormalLocation
-          WindowState = window.WindowState
-          LastSessionId = Some state.Session.Id
-          AutoPlaySession = state.AutoPlaySession
-          Muted = state.PlayerState.Muted
-          Volume = state.PlayerState.Volume }
-
-    let handleResult =
-        function
-        | Ok _ -> NoOp
-        | Error error -> AddError error
-
     let noChange = state, Cmd.none
 
     match msg with
+    // Internal
+    | NoOp -> noChange
     | ReadSessions (sessionIds, summaries) ->
         match sessionIds with
         | sessionId :: sessionIds ->
@@ -211,9 +159,9 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
               ) ]
     | UpdateTitle ->
         let trackAndPlaylist, cmd =
-            match state.PlaylistsState.PlayerStatus with
-            | Some (trackId, _) ->
-                match Playlists.Transition.findTrack state.PlaylistsState.Playlists trackId with
+            match state.PlaylistsState.TrackState with
+            | Some trackState ->
+                match Playlists.Model.findTrack state.PlaylistsState.Playlists trackState.Track.Id with
                 | Ok (playlist, trackData) -> $"{trackData.Name} | {playlist.Name} | ", Cmd.none
                 | Error error -> "", Cmd.ofMsg (AddError error)
             | None -> "", Cmd.none
@@ -221,58 +169,24 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         window.Title <- $"{trackAndPlaylist}{state.Session.Name} - {applicationNameAndVersion}"
         state, cmd
     | UpdateIcon ->
-        let playerStatus =
-            match state.PlayerState.TrackState with
-            | Some trackState ->
-                match trackState.PlayerState with
-                | Player.Model.PlayerState.Playing _ -> Some Active
-                | Player.Model.PlayerState.AwaitingPlay
-                | Player.Model.PlayerState.Paused _ -> Some Awaiting
-                | Player.Model.PlayerState.PlaybackErrored -> Some Errored
-                | _ -> Some Inactive
-            | None -> None
+        let variant = Playlists.Model.iconVariant state.PlaylistsState.TrackState
 
-        window.Icon <- applicationIcon playerStatus state.PlayerState.Muted
+        window.Icon <- applicationIcon variant state.PlaylistsState.Muted
         noChange
-    | NewSession ->
-        let session = newSession ()
-
-        let newPlaylistsState, playlistsMsg =
-            Playlists.Transition.init session.PlaylistIds session.LastTrackId state.AutoPlaySession
-
-        { state with
-            Session = session
-            SessionSummaries = sessionSummary session :: state.SessionSummaries
-            WriteSessionRequests = []
-            WritePreferencesRequests = []
-            PlaylistsState = newPlaylistsState },
-        (* Notes:
-            -- No need to call WriteSession as should be called as a result of playlistsMsg - and calling explicitly could cause errors from concurrent writes.
-            -- No need to call Player.Transition.Msg.NotifyNoTrackRequested as should be called (since new Session has no Tracks) as a result of playlistsMsg. *)
-        Cmd.batch [ Cmd.ofMsg (WritePreferences App); Cmd.ofMsg (PlaylistsMsg playlistsMsg) ]
-    | OpenSession sessionId ->
-        let read () = async { return! readSession sessionId }
-
-        let handleResult =
-            function
-            | Ok session -> SessionOpened session
-            | Error readError ->
-                let (SessionId guid) = sessionId
-                AddError $"App.transition -> Unable to read {nameof (Session)} ({guid}): {readErrorText readError}"
-
-        state, Cmd.OfAsync.perform read () handleResult
     | SessionOpened session ->
         let newPlaylistsState, playlistsMsg =
-            Playlists.Transition.init session.PlaylistIds session.LastTrackId state.AutoPlaySession
+            Playlists.Transition.init
+                session.PlaylistIds
+                session.LastTrackId
+                state.PlaylistsState.Muted
+                state.PlaylistsState.Volume
+                state.AutoPlaySession
 
         { state with
             Session = session
             WriteSessionRequests = []
             WritePreferencesRequests = []
             PlaylistsState = newPlaylistsState },
-        (* Notes:
-            -- No need to call WriteSession as Session has just been read.
-            -- No need to call Player.Transition.Msg.NotifyNoTrackRequested as should be called (if necessary, i.e. if no Tracks) as a result of playlistsMsg. *)
         Cmd.batch [ Cmd.ofMsg (WritePreferences App); Cmd.ofMsg (PlaylistsMsg playlistsMsg) ]
     | ToggleAutoPlaySession ->
         { state with AutoPlaySession = not state.AutoPlaySession }, Cmd.ofMsg (WritePreferences App)
@@ -285,37 +199,53 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 |> List.filter (fun (otherErrorId, _, _) -> otherErrorId <> errorId) },
         Cmd.none
     | ClearAllErrors -> { state with Errors = [] }, Cmd.none
-    | WriteSession ->
-        let writeSessionRequestId = WriteSessionRequestId.Create()
+    | WriteSession source ->
+        let writeSessionRequest = WriteSessionRequestId.Create(), source
 
         let delay () =
             async {
                 do! Async.Sleep DEBOUNCE_WRITE_SESSION_REQUEST_DELAY
-                return writeSessionRequestId
+                return writeSessionRequest
             }
 
-        { state with WriteSessionRequests = writeSessionRequestId :: state.WriteSessionRequests },
+        { state with WriteSessionRequests = writeSessionRequest :: state.WriteSessionRequests },
         Cmd.OfAsync.perform delay () DebounceWriteSessionRequest
-    | DebounceWriteSessionRequest writeSessionRequestId ->
+    | DebounceWriteSessionRequest (writeSessionRequestId, source) ->
         let newWriteSessionRequests =
             state.WriteSessionRequests
-            |> List.filter (fun otherWriteSessionRequestId -> otherWriteSessionRequestId <> writeSessionRequestId)
+            |> List.filter (fun (otherWriteSessionRequestId, _) -> otherWriteSessionRequestId <> writeSessionRequestId)
 
-        match newWriteSessionRequests with
+        match
+            newWriteSessionRequests
+            |> List.filter (fun (_, otherSource) -> otherSource = source)
+        with
         | _ :: _ -> { state with WriteSessionRequests = newWriteSessionRequests }, Cmd.none
         | [] ->
-            let newSession =
-                { state.Session with
-                    PlaylistIds = state.PlaylistsState.Playlists |> List.map (fun playlist -> playlist.Id)
-                    LastTrackId =
-                        match state.PlaylistsState.PlayerStatus with
-                        | Some (trackId, playerStatus) when playerStatus <> Errored -> Some trackId
-                        | _ -> None }
+            let newLastTrackId =
+                match state.PlaylistsState.TrackState with
+                | Some trackState ->
+                    match trackState.PlayerState with
+                    | Playlists.Model.PlayerState.PlaybackErrored -> None
+                    | _ -> Some trackState.Track.Id
+                | None -> None
 
-            { state with
-                Session = newSession
-                WriteSessionRequests = newWriteSessionRequests },
-            Cmd.OfAsync.perform writeSession newSession handleResult
+            let write =
+                match source with
+                | PlaylistsChanged -> true
+                | TrackStateChanged -> state.Session.LastTrackId <> newLastTrackId
+
+            if write then
+                let newSession =
+                    { state.Session with
+                        PlaylistIds = state.PlaylistsState.Playlists |> List.map (fun playlist -> playlist.Id)
+                        LastTrackId = newLastTrackId }
+
+                { state with
+                    Session = newSession
+                    WriteSessionRequests = newWriteSessionRequests },
+                Cmd.OfAsync.perform writeSession newSession handleResult
+            else
+                { state with WriteSessionRequests = newWriteSessionRequests }, Cmd.none
     | WritePreferences source ->
         let writePreferencesRequest = WritePreferencesRequestId.Create(), source
 
@@ -351,7 +281,24 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 | Player -> true
 
             if write then
-                let preferences = preferences ()
+                let preferences =
+                    let isNormal = window.WindowState = WindowState.Normal
+
+                    { NormalSize =
+                        if isNormal then
+                            window.Width, window.Height
+                        else
+                            state.LastNormalSize
+                      NormalLocation =
+                        if isNormal then
+                            window.Position.X, window.Position.Y
+                        else
+                            state.LastNormalLocation
+                      WindowState = window.WindowState
+                      LastSessionId = Some state.Session.Id
+                      AutoPlaySession = state.AutoPlaySession
+                      Muted = state.PlaylistsState.Muted
+                      Volume = state.PlaylistsState.Volume }
 
                 { state with
                     LastNormalSize = preferences.NormalSize
@@ -361,7 +308,56 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 Cmd.OfAsync.perform writePreferences preferences handleResult
             else
                 { state with WritePreferencesRequests = newWritePreferencesRequests }, Cmd.none
-    (* | OpenFiles ->
+    // UI
+    | OnNewSession ->
+        let session = newSession ()
+
+        let newPlaylistsState, playlistsMsg =
+            Playlists.Transition.init
+                session.PlaylistIds
+                session.LastTrackId
+                state.PlaylistsState.Muted
+                state.PlaylistsState.Volume
+                state.AutoPlaySession
+
+        { state with
+            Session = session
+            SessionSummaries = sessionSummary session :: state.SessionSummaries
+            WriteSessionRequests = []
+            WritePreferencesRequests = []
+            PlaylistsState = newPlaylistsState },
+        // Note: No need to call WriteSession as should be called once Playlists sends NotifyTrackStateChanged (and calling explicitly could cause errors due to concurrent writes),
+        Cmd.batch [ Cmd.ofMsg (WritePreferences App); Cmd.ofMsg (PlaylistsMsg playlistsMsg) ]
+    | OnOpenSession sessionId ->
+        let read () = async { return! readSession sessionId }
+
+        let handleResult =
+            function
+            | Ok session -> SessionOpened session
+            | Error readError ->
+                let (SessionId guid) = sessionId
+                AddError $"App.transition -> Unable to read {nameof (Session)} ({guid}): {readErrorText readError}"
+
+        state, Cmd.OfAsync.perform read () handleResult
+    // From Playlists
+    | PlaylistsMsg playlistsMsg ->
+        let newPlaylistState, cmd, externalMsgs =
+            Playlists.Transition.transition playlistsMsg state.PlaylistsState player
+
+        { state with PlaylistsState = newPlaylistState },
+        Cmd.batch
+            [ Cmd.map PlaylistsMsg cmd
+              yield! externalMsgs |> List.map handlePlaylistsExternal ]
+    // From HostWindow subscriptions
+    | LocationChanged -> state, Cmd.ofMsg (WritePreferences Host)
+    | EffectiveViewportChanged -> state, Cmd.ofMsg (WritePreferences Host)
+    // From MediaPlayer subscriptions
+    | PlayerErrored -> state, Cmd.map PlaylistsMsg (Cmd.ofMsg Playlists.Transition.Msg.NotifyErrored)
+    | PlayerPlaying -> state, Cmd.map PlaylistsMsg (Cmd.ofMsg Playlists.Transition.Msg.NotifyPlaying)
+    | PlayerPositionChanged position ->
+        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.NotifyPositionChanged position))
+    | PlayerEnded -> state, Cmd.map PlaylistsMsg (Cmd.ofMsg Playlists.Transition.Msg.NotifyEnded)
+(* | OpenFiles ->
         let dialog = Dialogs.getFilesDialog None
 
         let showDialog window =
@@ -381,27 +377,3 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     | AfterSelectFiles paths ->
         let songs = populateSongs paths |> Array.toList
         state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs)) *)
-    | NoOp -> noChange
-    | PlaylistsMsg playlistsMsg ->
-        let newPlaylistState, cmd, externalMsgs =
-            Playlists.Transition.transition playlistsMsg state.PlaylistsState
-
-        let externalCmds = externalMsgs |> List.map handlePlaylistsExternal
-
-        { state with PlaylistsState = newPlaylistState }, Cmd.batch [ Cmd.map PlaylistsMsg cmd; yield! externalCmds ]
-    | PlayerMsg playerMsg ->
-        let newPlayerState, cmd, externalMsgs =
-            Player.Transition.transition playerMsg state.PlayerState player
-
-        let externalCmds = externalMsgs |> List.map handlePlayerExternal
-
-        { state with PlayerState = newPlayerState }, Cmd.batch [ Cmd.map PlayerMsg cmd; yield! externalCmds ]
-    | LocationChanged -> state, Cmd.ofMsg (WritePreferences Host)
-    | EffectiveViewportChanged -> state, Cmd.ofMsg (WritePreferences Host)
-    | PlayerPlaying -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyPlaying)
-    | PlayerPaused -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyPaused)
-    | PlayerStopped -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyStopped)
-    | PlayerEnded -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyEnded)
-    | PlayerPositionChanged position ->
-        state, Cmd.map PlayerMsg (Cmd.ofMsg (Player.Transition.Msg.NotifyPositionChanged position))
-    | PlayerErrored -> state, Cmd.map PlayerMsg (Cmd.ofMsg Player.Transition.Msg.NotifyPlaybackErrored)

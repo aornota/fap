@@ -94,7 +94,7 @@ let listNamesWithoutExtension persistenceType =
     Directory.EnumerateFiles((folder persistenceType).FullName, $"*.{extension}")
     |> List.ofSeq
     |> List.map FileInfo
-    |> List.choose (fun file -> nameWithoutExtension file.Name extensionLength)
+    |> List.choose (fun fi -> nameWithoutExtension fi.Name extensionLength)
 
 let readErrorText =
     function

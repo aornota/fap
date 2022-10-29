@@ -1,5 +1,6 @@
 module Aornota.Fap.Utilities
 
+open Aornota.Fap.Literals
 open System
 
 [<Measure>]
@@ -84,6 +85,8 @@ let playerVolume (volume: int) =
     match Math.Max(Math.Min(volume, 100), 0) with
     | 0 -> 0
     | volume -> Math.Log10(volume) * 50. |> int
+
+let fileExtensions = [ FILE_EXTENSION_FLAC; FILE_EXTENSION_MP3; FILE_EXTENSION_WAV ]
 
 let isDebug =
 #if DEBUG

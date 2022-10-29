@@ -3,9 +3,9 @@ module Aornota.Fap.App.Program
 open Aornota.Fap
 open Aornota.Fap.App.Model
 open Aornota.Fap.App.Preferences
+open Aornota.Fap.App.Subscriptions
 open Aornota.Fap.App.Transition
 open Aornota.Fap.App.View
-open Aornota.Fap.Domain
 open Aornota.Fap.Literals
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
@@ -20,13 +20,17 @@ open Avalonia.Themes.Fluent
 open LibVLCSharp.Shared
 open System
 
+let private player =
+    use libvlc = new LibVLC()
+    new MediaPlayer(libvlc)
+
 type AppWindow(preferences, session: Session, sessionIds, playlistIds, startupErrors) as this =
     inherit HostWindow()
 
     do
         base.Title <- $"{session.Name} | {applicationNameAndVersion}"
 
-        base.Icon <- applicationIcon (Some Inactive) preferences.Muted
+        base.Icon <- applicationIcon ICON_VARIANT_INACTIVE preferences.Muted
         base.MinWidth <- WINDOW_MINIMUM_WIDTH
         base.MinHeight <- WINDOW_MINIMUM_HEIGHT
         base.Width <- Math.Max(fst preferences.NormalSize, WINDOW_MINIMUM_WIDTH)
@@ -38,7 +42,6 @@ type AppWindow(preferences, session: Session, sessionIds, playlistIds, startupEr
         // this.VisualRoot.VisualRoot.Renderer.DrawFps <- true
         // this.VisualRoot.VisualRoot.Renderer.DrawDirtyRects <- true
 
-        let player = Player.Utilities.getEmptyPlayer
         player.Mute <- preferences.Muted
         player.Volume <- playerVolume preferences.Volume
 
@@ -51,14 +54,12 @@ type AppWindow(preferences, session: Session, sessionIds, playlistIds, startupEr
 
         Program.mkProgram init updateWithServices view
         |> Program.withHost this
-        |> Program.withSubscription (fun _ -> Subscriptions.locationChanged this)
-        |> Program.withSubscription (fun _ -> Subscriptions.effectiveViewportChanged this)
-        |> Program.withSubscription (fun _ -> Subscriptions.playing player)
-        |> Program.withSubscription (fun _ -> Subscriptions.paused player)
-        |> Program.withSubscription (fun _ -> Subscriptions.stopped player)
-        |> Program.withSubscription (fun _ -> Subscriptions.ended player)
-        |> Program.withSubscription (fun _ -> Subscriptions.positionChanged player)
-        |> Program.withSubscription (fun _ -> Subscriptions.playbackErrored player)
+        |> Program.withSubscription (fun _ -> locationChanged this)
+        |> Program.withSubscription (fun _ -> effectiveViewportChanged this)
+        |> Program.withSubscription (fun _ -> playbackErrored player)
+        |> Program.withSubscription (fun _ -> playing player)
+        |> Program.withSubscription (fun _ -> positionChanged player)
+        |> Program.withSubscription (fun _ -> ended player)
 #if DEBUG
         // |> Program.withConsoleTrace
 #endif
@@ -120,7 +121,6 @@ type App() =
         | _ -> ()
 
 [<EntryPoint>]
-// TODO-NMB: Make use of args?...
 let main (args: string[]) =
     AppBuilder
         .Configure<App>()

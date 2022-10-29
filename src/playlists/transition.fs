@@ -1,41 +1,53 @@
 module Aornota.Fap.Playlists.Transition
 
-open Aornota.Fap.Domain
 open Aornota.Fap.Playlists.Model
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Elmish
+open LibVLCSharp.Shared
+open System
+open System.IO
 
 type ExternalMsg =
-    // For Player
-    | RequestTrack of trackData: TrackData * hasPrevious: bool * hasNext: bool * play: bool
-    | RequestNoTrack
-    // For App
     | NotifyPlaylistsChanged
-    | NotifyPlayerStatusChanged
+    | NotifyTrackStateChanged
+    | NotifyMutedToggled
+    | NotifyVolumeChanged
     | NotifyError of string
 
 type Msg =
     // Internal
+    | NoOp
     | ReadPlaylists of PlaylistId list * TrackId option * bool * Playlist list
     | ReadPlaylistError of ReadError * PlaylistId * PlaylistId list * TrackId option * bool * Playlist list
     | WritePlaylist of PlaylistId
     | DebounceWritePlaylistRequest of WritePlaylistRequestId * PlaylistId
     | WritePlaylistError of string * PlaylistId
-    | SelectPlaylist of PlaylistId
-    | PlayTrack of TrackId
-    | NoOp
-    // From Player
-    | NotifyRequestPrevious of TrackId * bool
-    | NotifyRequestNext of TrackId * bool
-    | NotifyPlaying of TrackId * int64<millisecond>
-    | NotifyPaused of TrackId
-    | NotifyStopped of TrackId
-    | NotifyEnded of TrackId
-    | NotifyPlaybackErrored of TrackId
+    | DebounceSeekRequest of SeekRequestId * float32
+    | RequestTrack of trackData: TrackData * hasPrevious: bool * hasNext: bool * play: bool
+    | RequestNoTrack
+    // UI
+    | OnSelectPlaylist of PlaylistId
+    | OnPlayTrack of TrackId
+    | OnSeek of float32
+    | OnPrevious
+    | OnNext
+    | OnPlay
+    | OnPause
+    | OnStop
+    | OnToggleMuted
+    | OnVolume of int
+    // From MediaPlayer subscriptions
+    | NotifyErrored
+    | NotifyPlaying
+    | NotifyPositionChanged of float32
+    | NotifyEnded
 
 [<Literal>]
 let private DEBOUNCE_WRITE_PLAYLIST_REQUEST_DELAY = 250
+
+[<Literal>]
+let private DEBOUNCE_SEEK_REQUEST_DELAY = 250
 
 let private playlist playlists playlistId =
     playlists |> List.tryFind (fun otherPlaylist -> otherPlaylist.Id = playlistId)
@@ -45,14 +57,7 @@ let private isTrackId trackId =
     | Track track when track.Id = trackId -> true
     | _ -> false
 
-let tracks playlist =
-    playlist.Items
-    |> List.choose (fun item ->
-        match item with
-        | Track trackData -> Some trackData
-        | Summary -> None)
-
-let private previousAndOrNext playlist trackId =
+let private previousAndNext playlist trackId =
     let tracks = tracks playlist
 
     match tracks |> List.tryFindIndex (fun trackData -> trackData.Id = trackId) with
@@ -68,8 +73,8 @@ let private previousAndOrNext playlist trackId =
         Ok(previous, next)
     | None -> Error $"no matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
 
-let private hasPreviousAndOrNext playlist trackId =
-    match previousAndOrNext playlist trackId with
+let private hasPreviousAndNext playlist trackId =
+    match previousAndNext playlist trackId with
     | Ok (Some _, Some _) -> Ok(true, true)
     | Ok (Some _, None) -> Ok(true, false)
     | Ok (None, Some _) -> Ok(false, true)
@@ -114,48 +119,42 @@ let private updatePlaylists (playlists: Playlist list) (playlist: Playlist) =
     else
         Error $"multiple matches for {playlist.Id} for {nameof (Playlist)}s"
 
-let findTrack playlists trackId =
-    let matches =
-        playlists
-        |> List.choose (fun playlist ->
-            let trackMatches =
-                playlist.Items
-                |> List.choose (fun item ->
-                    match item with
-                    | Track track when track.Id = trackId -> Some track
-                    | _ -> None)
+let private isPlaying =
+    function
+    | Playing _ -> true
+    | _ -> false
 
-            match trackMatches with
-            | _ :: _ -> Some(playlist, trackMatches)
-            | [] -> None)
+let private playTrack track (player: MediaPlayer) =
+    let path = Path.Combine(track.Folder, track.Name)
+    use libvlc = new LibVLC()
+    use media = new Media(libvlc, path, FromType.FromPath)
+    player.Play media |> ignore
 
-    match matches with
-    | [ playlist, trackMatches ] ->
-        match trackMatches with
-        | [ trackData ] -> Ok(playlist, trackData)
-        | [] -> Error $"no matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
-        | _ -> Error $"multiple matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
-    | [] -> Error $"no matches for {trackId}"
-    | _ -> Error $"matches for {trackId} for multiple {nameof (Playlist)}s"
-
-let init playlistIds lastTrackId autoPlay =
+let init playlistIds lastTrackId muted volume autoPlay =
     { Playlists = []
       SelectedPlaylistId = None
-      PlayerStatus = None
-      WritePlaylistRequests = [] },
+      Muted = muted
+      Volume = volume
+      TrackState = None
+      WritePlaylistRequests = []
+      SeekRequests = [] },
     ReadPlaylists(playlistIds, lastTrackId, autoPlay, [])
 
-// TODO-NMB: If change TrackId for PlayerStatus - or set PlayerStatus to None [or to Some(_, Errored)] - call (external) NotifyPlayerStatusChanged...
-// TODO-NMB: If add / remove / reorder Playlists, call (external) NotifyPlaylistsChanged...
-// TODO-NMB: If add new Playlist, call (external) NewPlaylistAdded?...
-// TODO-NMB: If add / remove / reorder Playlist items, call WritePlaylist...
-let transition msg state =
+(* Notes:
+    -- If change TrackState.Track (including setting TrackState to None) or TrackState.PlayerStatus, call (external) NotifyTrackStateChanged.
+    -- If add / remove / reorder Playlists, call (external) NotifyPlaylistsChanged.
+    -- If add new Playlist, call (external) NewPlaylistAdded?
+    -- If add / remove / reorder Playlist items, call (internal) WritePlaylist. *)
+
+let transition msg state (player: MediaPlayer) =
     let notifyError error =
         state, Cmd.none, [ NotifyError $"Playlists.transition -> {error}" ]
 
     let noChange = state, Cmd.none, []
 
     match msg with
+    // Internal
+    | NoOp -> noChange
     | ReadPlaylists (playlistIds, lastTrackId, autoPlay, playlists) ->
         match playlistIds with
         | playlistId :: playlistIds ->
@@ -175,21 +174,17 @@ let transition msg state =
                 | Some lastTrackId ->
                     match findTrack playlists lastTrackId with
                     | Ok (playlist, trackData) ->
-                        match hasPreviousAndOrNext playlist trackData.Id with
+                        match hasPreviousAndNext playlist trackData.Id with
                         | Ok (hasPrevious, hasNext) ->
-                            Some(playlist.Id, (trackData.Id, Inactive)),
-                            [ NotifyPlayerStatusChanged
-                              RequestTrack(trackData, hasPrevious, hasNext, autoPlay) ]
+                            Some(playlist.Id, Cmd.ofMsg (RequestTrack(trackData, hasPrevious, hasNext, autoPlay))), []
                         | Error error -> None, [ NotifyError $"Playlists.transition -> {error}" ]
                     | Error error -> None, [ NotifyError $"Playlists.transition -> {error}" ]
                 | None -> None, []
 
-            let selectedPlaylistId, playerStatus, externalMsgs =
+            let selectedPlaylistId, cmd, externalMsgs =
                 match lastTrack with
-                | (Some selectedPlaylistIdAndPlayerStatus, externalMsgs) ->
-                    Some(fst selectedPlaylistIdAndPlayerStatus),
-                    Some(snd selectedPlaylistIdAndPlayerStatus),
-                    externalMsgs
+                | (Some selectedPlaylistIdAndMsg, externalMsgs) ->
+                    Some(fst selectedPlaylistIdAndMsg), snd selectedPlaylistIdAndMsg, externalMsgs
                 | (None, externalMsgs) ->
                     let playlistsWithTracks =
                         playlists
@@ -200,24 +195,21 @@ let transition msg state =
 
                     match playlistsWithTracks with
                     | (playlist, trackData) :: _ ->
-                        match hasPreviousAndOrNext playlist trackData.Id with
+                        match hasPreviousAndNext playlist trackData.Id with
                         | Ok (hasPrevious, hasNext) ->
                             Some playlist.Id,
-                            Some(trackData.Id, Inactive),
-                            NotifyPlayerStatusChanged
-                            :: RequestTrack(trackData, hasPrevious, hasNext, autoPlay) :: externalMsgs
+                            Cmd.ofMsg (RequestTrack(trackData, hasPrevious, hasNext, autoPlay)),
+                            externalMsgs
                         | Error error ->
                             None,
-                            None,
-                            NotifyPlayerStatusChanged
-                            :: RequestNoTrack :: NotifyError $"Playlists.transition -> {error}" :: externalMsgs
-                    | [] -> None, None, NotifyPlayerStatusChanged :: RequestNoTrack :: externalMsgs
+                            Cmd.ofMsg RequestNoTrack,
+                            NotifyError $"Playlists.transition -> {error}" :: externalMsgs
+                    | [] -> None, Cmd.ofMsg RequestNoTrack, externalMsgs
 
             { state with
                 Playlists = playlists
-                SelectedPlaylistId = selectedPlaylistId
-                PlayerStatus = playerStatus },
-            Cmd.none,
+                SelectedPlaylistId = selectedPlaylistId },
+            cmd,
             NotifyPlaylistsChanged :: externalMsgs
     | ReadPlaylistError (readError, PlaylistId guid, playlistIds, lastTrackId, autoPlay, playlists) ->
         state,
@@ -263,76 +255,315 @@ let transition msg state =
             Cmd.OfAsync.perform writePlaylist playlistId handleResult,
             []
     | WritePlaylistError (error, PlaylistId guid) -> notifyError $"Unable to write playlist ({guid}): {error}"
-    | SelectPlaylist playlistId -> { state with SelectedPlaylistId = Some playlistId }, Cmd.none, []
-    | PlayTrack trackId ->
-        match findTrack state.Playlists trackId with
-        | Ok (playlist, trackData) ->
-            match hasPreviousAndOrNext playlist trackData.Id with
-            | Ok (hasPrevious, hasNext) ->
-                { state with PlayerStatus = Some(trackData.Id, Awaiting) },
-                Cmd.none,
-                [ RequestTrack(trackData, hasPrevious, hasNext, true)
-                  NotifyPlayerStatusChanged ]
-            | Error error -> notifyError $"{nameof (PlayTrack)}: {error}"
-        | Error error -> notifyError $"{nameof (PlayTrack)}: {error}"
-    | NoOp -> noChange
-    | NotifyRequestPrevious (trackId, play) ->
-        match findTrack state.Playlists trackId with
-        | Ok (playlist, trackData) ->
-            match previousAndOrNext playlist trackId with
-            | Ok (Some previous, _) ->
-                match hasPreviousAndOrNext playlist previous.Id with
-                | Ok (hasPrevious, hasNext) ->
-                    let playerStatus = if play then Awaiting else Inactive
+    | RequestTrack (trackData, hasPrevious, hasNext, play) ->
+        let newStateAndCmdAndExternalMsgs =
+            match state.TrackState with
+            | Some trackState ->
+                if trackState.Track.Id = trackData.Id then
+                    if not play then
+                        Error
+                            $"{nameof (RequestTrack)} when trackState is already requested {nameof (TrackData)} and not play"
+                    else
+                        match trackState.PlayerState with
+                        | Playing _ -> Ok(state, Cmd.ofMsg (OnSeek START_POSITION), [])
+                        | _ -> Ok(state, Cmd.ofMsg OnPlay, [])
+                else
+                    if play then
+                        playTrack trackData player
+                    else
+                        player.Media <- null
 
-                    { state with PlayerStatus = Some(previous.Id, playerStatus) },
-                    Cmd.none,
-                    [ NotifyPlayerStatusChanged
-                      RequestTrack(previous, hasPrevious, hasNext, play) ]
-                | Error error -> notifyError $"{nameof (NotifyRequestPrevious)}: {error}"
-            | Ok (None, _) ->
-                notifyError
-                    $"{nameof (NotifyRequestPrevious)}: no previous track for {trackId} for {nameof (Playlist)} {playlist.Name}"
-            | Error error -> notifyError $"{nameof (NotifyRequestPrevious)}: {error}"
-        | Error error -> notifyError $"{nameof (NotifyRequestPrevious)}: {error}"
-    | NotifyRequestNext (trackId, play) ->
-        match findTrack state.Playlists trackId with
-        | Ok (playlist, trackData) ->
-            match previousAndOrNext playlist trackId with
-            | Ok (_, Some next) ->
-                match hasPreviousAndOrNext playlist next.Id with
-                | Ok (hasPrevious, hasNext) ->
-                    let playerStatus = if play then Awaiting else Inactive
-
-                    { state with PlayerStatus = Some(next.Id, playerStatus) },
-                    Cmd.none,
-                    [ NotifyPlayerStatusChanged; RequestTrack(next, hasPrevious, hasNext, play) ]
-                | Error error -> notifyError $"{nameof (NotifyRequestNext)}: {error}"
-            | Ok (_, None) ->
-                notifyError
-                    $"{nameof (NotifyRequestNext)}: no next track for {trackId} for {nameof (Playlist)} {playlist.Name}"
-            | Error error -> notifyError $"{nameof (NotifyRequestPrevious)}: {error}"
-        | Error error -> notifyError $"{nameof (NotifyRequestPrevious)}: {error}"
-    | NotifyPlaying (trackId, duration) ->
-        match findTrack state.Playlists trackId with
-        | Ok (playlist, trackData) ->
-            if trackData.Duration <> Some duration then
-                match updatePlaylist playlist { trackData with Duration = Some duration } with
-                | Ok newPlaylist ->
-                    match updatePlaylists state.Playlists newPlaylist with
-                    | Ok newPlaylists ->
+                    Ok(
                         { state with
-                            Playlists = newPlaylists
-                            PlayerStatus = Some(trackId, Active) },
-                        Cmd.ofMsg (WritePlaylist newPlaylist.Id),
+                            TrackState =
+                                Some
+                                    { Track = trackData
+                                      PlayerState = (if play then AwaitingPlay else NoMedia)
+                                      HasPrevious = hasPrevious
+                                      HasNext = hasNext } },
+                        Cmd.none,
+                        [ NotifyTrackStateChanged ]
+                    )
+            | None ->
+                if play then
+                    playTrack trackData player
+
+                Ok(
+                    { state with
+                        TrackState =
+                            Some
+                                { Track = trackData
+                                  PlayerState = (if play then AwaitingPlay else NoMedia)
+                                  HasPrevious = hasPrevious
+                                  HasNext = hasNext } },
+                    Cmd.none,
+                    [ NotifyTrackStateChanged ]
+                )
+
+        match newStateAndCmdAndExternalMsgs with
+        | Ok (newState, cmd, externalMsgs) -> newState, cmd, externalMsgs
+        | Error error -> notifyError error
+    | RequestNoTrack ->
+        player.Media <- null
+
+        { state with
+            TrackState = None
+            SeekRequests = [] },
+        Cmd.none,
+        [ NotifyTrackStateChanged ]
+    | DebounceSeekRequest (seekRequestId, position) ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing _ ->
+                let newSeekRequests =
+                    state.SeekRequests
+                    |> List.filter (fun otherSeekRequestId -> otherSeekRequestId <> seekRequestId)
+
+                match newSeekRequests with
+                | _ :: _ -> { state with SeekRequests = newSeekRequests }, Cmd.none, []
+                | [] ->
+                    player.Position <- position
+
+                    { state with
+                        TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
+                        SeekRequests = newSeekRequests },
+                    Cmd.none,
+                    []
+            | _ -> notifyError $"{nameof (DebounceSeekRequest)} when {nameof (PlayerState)} not {nameof (Playing)}"
+        | None -> notifyError $"{nameof (DebounceSeekRequest)} when trackState is {nameof (None)}"
+    // From UI
+    | OnSelectPlaylist playlistId -> { state with SelectedPlaylistId = Some playlistId }, Cmd.none, []
+    | OnPlayTrack trackId ->
+        match findTrack state.Playlists trackId with
+        | Ok (playlist, trackData) ->
+            match hasPreviousAndNext playlist trackData.Id with
+            | Ok (hasPrevious, hasNext) -> state, Cmd.ofMsg (RequestTrack(trackData, hasPrevious, hasNext, true)), []
+            | Error error -> notifyError $"{nameof (OnPlayTrack)}: {error}"
+        | Error error -> notifyError $"{nameof (OnPlayTrack)}: {error}"
+    | OnSeek position ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing (_, lastPositionChanged) ->
+                let changed =
+                    match lastPositionChanged with
+                    | Some lastPositionChanged ->
+                        // Avoid glitches due to rounding errors (e.g. NotifyPositionChanged causes Slider to call RequestSeek).
+                        let multiplier = 10000f
+
+                        (Math.Round((position * multiplier) |> double) |> int)
+                        <> (Math.Round((lastPositionChanged * multiplier) |> double) |> int)
+                    | None -> true
+
+                if changed then
+                    let seekRequest = SeekRequestId.Create(), position
+
+                    let delay () =
+                        async {
+                            do! Async.Sleep DEBOUNCE_SEEK_REQUEST_DELAY
+                            return seekRequest
+                        }
+
+                    { state with
+                        TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
+                        SeekRequests = (fst seekRequest) :: state.SeekRequests },
+                    Cmd.OfAsync.perform delay () DebounceSeekRequest,
+                    []
+                else
+                    noChange
+            | Paused _ ->
+                { state with TrackState = Some { trackState with PlayerState = Paused position } }, Cmd.none, []
+            | Stopped _ ->
+                { state with TrackState = Some { trackState with PlayerState = Stopped position } }, Cmd.none, []
+            | _ -> noChange // TODO-NMB: No need to notify error for this?...notifyError $"{nameof (Seek)} when {nameof (PlayerState)} is not {nameof (Playing)}, {nameof (Paused)} or {nameof (Stopped)}"
+        | None -> noChange // TODO-NMB: No need to notify error for this?...notifyError $"{nameof (Seek)} when trackState is {nameof (None)}"
+    | OnPrevious ->
+        match state.TrackState with
+        | Some trackState when trackState.HasPrevious ->
+            match findTrack state.Playlists trackState.Track.Id with
+            | Ok (playlist, trackData) ->
+                match previousAndNext playlist trackData.Id with
+                | Ok (Some previous, _) ->
+                    match hasPreviousAndNext playlist previous.Id with
+                    | Ok (hasPrevious, hasNext) ->
+                        state,
+                        Cmd.ofMsg (RequestTrack(previous, hasPrevious, hasNext, isPlaying trackState.PlayerState)),
                         []
+                    | Error error -> notifyError $"{nameof (OnPrevious)}: {error}"
+                | Ok (None, _) ->
+                    notifyError
+                        $"{nameof (OnPrevious)}: no previous track for {trackData.Id} for {nameof (Playlist)} {playlist.Name}"
+                | Error error -> notifyError $"{nameof (OnPrevious)}: {error}"
+            | Error error -> notifyError $"{nameof (OnPrevious)}: {error}"
+        | Some _ -> notifyError $"{nameof (OnPrevious)} when not {nameof (TrackState)}.HasPrevious"
+        | None -> notifyError $"{nameof (OnPrevious)} when {nameof (TrackState)} is {nameof (None)}"
+    | OnNext ->
+        match state.TrackState with
+        | Some trackState when trackState.HasNext ->
+            match findTrack state.Playlists trackState.Track.Id with
+            | Ok (playlist, trackData) ->
+                match previousAndNext playlist trackData.Id with
+                | Ok (_, Some next) ->
+                    match hasPreviousAndNext playlist next.Id with
+                    | Ok (hasPrevious, hasNext) ->
+                        state,
+                        Cmd.ofMsg (RequestTrack(next, hasPrevious, hasNext, isPlaying trackState.PlayerState)),
+                        []
+                    | Error error -> notifyError $"{nameof (OnPrevious)}: {error}"
+                | Ok (_, None) ->
+                    notifyError
+                        $"{nameof (OnNext)}: no next track for {trackData.Id} for {nameof (Playlist)} {playlist.Name}"
+                | Error error -> notifyError $"{nameof (OnNext)}: {error}"
+            | Error error -> notifyError $"{nameof (OnNext)}: {error}"
+        | Some _ -> notifyError $"{nameof (OnNext)} when not {nameof (TrackState)}.HasPrevious"
+        | None -> notifyError $"{nameof (OnNext)} when {nameof (TrackState)} is {nameof (None)}"
+    | OnPlay ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | NoMedia
+            | Ended ->
+                playTrack trackState.Track player
+
+                { state with TrackState = Some { trackState with PlayerState = AwaitingPlay } },
+                Cmd.none,
+                [ NotifyTrackStateChanged ]
+            | AwaitingPlay _ -> notifyError $"{nameof (OnPlay)} when {nameof (PlayerState)} is {nameof (AwaitingPlay)}"
+            | Playing _ -> notifyError $"{nameof (OnPlay)} when {nameof (PlayerState)} already {nameof (Playing)}"
+            | Paused position ->
+                player.Pause()
+                player.Position <- position
+
+                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } },
+                Cmd.none,
+                [ NotifyTrackStateChanged ]
+            | Stopped position ->
+                player.Play() |> ignore
+                player.Position <- position
+
+                { state with TrackState = Some { trackState with PlayerState = Playing(position, None) } },
+                Cmd.none,
+                [ NotifyTrackStateChanged ]
+            | PlaybackErrored ->
+                notifyError $"{nameof (OnPlay)} when {nameof (PlayerState)} is {nameof (PlaybackErrored)}"
+        | None -> notifyError $"{nameof (OnPlay)} when {nameof (TrackState)} is {nameof (None)}"
+    | OnPause ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing (position, _) ->
+                player.Pause()
+
+                { state with TrackState = Some { trackState with PlayerState = Paused position } },
+                Cmd.none,
+                [ NotifyTrackStateChanged ]
+            | _ -> notifyError $"{nameof (OnPause)} when {nameof (PlayerState)} is not {nameof (Playing)}"
+        | None -> notifyError $"{nameof (OnPause)} when {nameof (TrackState)} is {nameof (None)}"
+    | OnStop ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing _
+            | Paused _ ->
+                player.Stop()
+
+                { state with TrackState = Some { trackState with PlayerState = Stopped START_POSITION } },
+                Cmd.none,
+                [ NotifyTrackStateChanged ]
+            | _ ->
+                notifyError
+                    $"{nameof (OnStop)} when {nameof (PlayerState)} is not {nameof (Playing)} or {nameof (Paused)}"
+        | None -> notifyError $"{nameof (OnStop)} when {nameof (TrackState)} is {nameof (None)}"
+    | OnToggleMuted ->
+        let newMuted = not state.Muted
+        player.Mute <- newMuted
+        { state with Muted = newMuted }, Cmd.none, [ NotifyMutedToggled ]
+    | OnVolume volume ->
+        if volume <> state.Volume then
+            let newMuted = volume = 0
+            player.Mute <- newMuted
+            player.Volume <- playerVolume volume
+
+            let externalMsgs =
+                [ NotifyVolumeChanged
+                  if newMuted <> state.Muted then
+                      NotifyMutedToggled ]
+
+            { state with
+                Muted = newMuted
+                Volume = volume },
+            Cmd.none,
+            externalMsgs
+        else
+            noChange
+    // From MediaPlayer subscriptions
+    | NotifyErrored ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | AwaitingPlay _ ->
+                { state with TrackState = Some { trackState with PlayerState = PlaybackErrored } },
+                Cmd.none,
+                [ NotifyTrackStateChanged ]
+            | _ -> notifyError $"{nameof (NotifyErrored)} when {nameof (PlayerState)} is not {nameof (AwaitingPlay)}"
+        | None -> notifyError $"{nameof (NotifyErrored)} when {nameof (TrackState)} is {nameof (None)}"
+    | NotifyPlaying ->
+        match state.TrackState with
+        | Some trackState ->
+            let duration = player.Length * 1L<millisecond>
+
+            let newTrackState, externalMsgs =
+                match trackState.PlayerState with
+                | AwaitingPlay _ ->
+                    { trackState with
+                        Track = { trackState.Track with Duration = Some duration }
+                        PlayerState = Playing(START_POSITION, None) },
+                    [ NotifyTrackStateChanged ]
+                | _ -> trackState, []
+
+            if trackState.Track.Duration <> Some duration then
+                match findTrack state.Playlists trackState.Track.Id with
+                | Ok (playlist, trackData) ->
+                    match updatePlaylist playlist { trackData with Duration = Some duration } with
+                    | Ok newPlaylist ->
+                        match updatePlaylists state.Playlists newPlaylist with
+                        | Ok newPlaylists ->
+                            { state with
+                                Playlists = newPlaylists
+                                TrackState = Some newTrackState },
+                            Cmd.ofMsg (WritePlaylist newPlaylist.Id),
+                            externalMsgs
+                        | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
                     | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
                 | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
             else
-                { state with PlayerStatus = Some(trackId, Active) }, Cmd.none, []
-        | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
-    | NotifyPaused trackId -> { state with PlayerStatus = Some(trackId, Awaiting) }, Cmd.none, []
-    | NotifyStopped trackId
-    | NotifyEnded trackId -> { state with PlayerStatus = Some(trackId, Inactive) }, Cmd.none, []
-    | NotifyPlaybackErrored trackId ->
-        { state with PlayerStatus = Some(trackId, Errored) }, Cmd.none, [ NotifyPlayerStatusChanged ]
+                { state with TrackState = Some newTrackState }, Cmd.none, externalMsgs
+        | None -> notifyError $"{nameof (NotifyPlaying)} when {nameof (TrackState)} is {nameof (None)}"
+    | NotifyPositionChanged position ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing (currentPosition, _) ->
+                let newPosition =
+                    match state.SeekRequests with
+                    | _ :: _ -> currentPosition
+                    | [] -> position
+
+                { state with TrackState = Some { trackState with PlayerState = Playing(newPosition, Some position) } },
+                Cmd.none,
+                []
+            | _ -> notifyError $"{nameof (NotifyPositionChanged)} when {nameof (PlayerState)} not {nameof (Playing)}"
+        | None -> notifyError $"{nameof (NotifyPositionChanged)} when {nameof (TrackState)} is {nameof (None)}"
+    | NotifyEnded ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing _ ->
+                let cmd = if trackState.HasNext then Cmd.ofMsg OnNext else Cmd.none
+
+                { state with TrackState = Some { trackState with PlayerState = Ended } },
+                cmd,
+                [ NotifyTrackStateChanged ]
+            | _ -> notifyError $"{nameof (NotifyEnded)} when {nameof (PlayerState)} not {nameof (Playing)}"
+        | None -> notifyError $"{nameof (NotifyEnded)} when {nameof (TrackState)} is {nameof (None)}"

@@ -24,29 +24,16 @@ let effectiveViewportChanged (window: HostWindow) =
 // #endregion
 
 // #region MediaPlayer subscription
+let playbackErrored (player: MediaPlayer) =
+    let sub dispatch =
+        player.EncounteredError.Subscribe(fun _ -> dispatch Transition.Msg.PlayerErrored)
+        |> ignore
+
+    Cmd.ofSub sub
+
 let playing (player: MediaPlayer) =
     let sub dispatch =
         player.Playing.Subscribe(fun _ -> dispatch Transition.Msg.PlayerPlaying)
-        |> ignore
-
-    Cmd.ofSub sub
-
-let paused (player: MediaPlayer) =
-    let sub dispatch =
-        player.Paused.Subscribe(fun _ -> dispatch Transition.Msg.PlayerPaused) |> ignore
-
-    Cmd.ofSub sub
-
-let stopped (player: MediaPlayer) =
-    let sub dispatch =
-        player.Stopped.Subscribe(fun _ -> dispatch Transition.Msg.PlayerStopped)
-        |> ignore
-
-    Cmd.ofSub sub
-
-let ended (player: MediaPlayer) =
-    let sub dispatch =
-        player.EndReached.Subscribe(fun _ -> dispatch Transition.Msg.PlayerEnded)
         |> ignore
 
     Cmd.ofSub sub
@@ -58,9 +45,9 @@ let positionChanged (player: MediaPlayer) =
 
     Cmd.ofSub sub
 
-let playbackErrored (player: MediaPlayer) =
+let ended (player: MediaPlayer) =
     let sub dispatch =
-        player.EncounteredError.Subscribe(fun _ -> dispatch Transition.Msg.PlayerErrored)
+        player.EndReached.Subscribe(fun _ -> dispatch Transition.Msg.PlayerEnded)
         |> ignore
 
     Cmd.ofSub sub

@@ -1,7 +1,6 @@
 module Aornota.Fap.App.Model
 
 open Aornota.Fap
-open Aornota.Fap.Domain
 open Aornota.Fap.Literals
 open Aornota.Fap.Persistence
 open Avalonia.Controls
@@ -17,7 +16,7 @@ type Session =
     { Id: SessionId
       Name: string
       PlaylistIds: Playlists.Model.PlaylistId list
-      LastTrackId: TrackId option }
+      LastTrackId: Playlists.Model.TrackId option }
 
 type SessionSummary =
     { SessionId: SessionId
@@ -38,6 +37,10 @@ type WriteSessionRequestId =
     | WriteSessionRequestId of Guid
 
     static member Create() = WriteSessionRequestId(Guid.NewGuid())
+
+type WriteSessionRequestSource =
+    | PlaylistsChanged
+    | TrackStateChanged
 
 type WritePreferencesRequestId =
     | WritePreferencesRequestId of Guid
@@ -60,10 +63,9 @@ type State =
       LastNormalSize: float * float
       LastNormalLocation: int * int
       LastWindowState: WindowState
-      WriteSessionRequests: WriteSessionRequestId list
+      WriteSessionRequests: (WriteSessionRequestId * WriteSessionRequestSource) list
       WritePreferencesRequests: (WritePreferencesRequestId * WritePreferencesRequestSource) list
-      PlaylistsState: Playlists.Model.State
-      PlayerState: Player.Model.State }
+      PlaylistsState: Playlists.Model.State }
 
 [<Literal>]
 let NEW_SESSION = "new session"
@@ -82,16 +84,8 @@ let readSession sessionId =
 let writeSession session =
     async { return! write Session (sessionFile session.Id) session }
 
-let applicationIcon playerStatus muted =
-    let variant =
-        match playerStatus with
-        | Some Active -> "active"
-        | Some Awaiting -> "awaiting"
-        | Some Inactive -> "inactive"
-        | Some Errored -> "errored"
-        | None -> "disabled"
-
-    let muted = if muted then "-muted" else ""
+let applicationIcon variant muted =
+    let muted = if muted then $"-{ICON_VARIANT_MUTED}" else ""
     WindowIcon(Bitmap.FromImageAsset($"fap-{variant}{muted}.png"))
 
 let applicationNameAndVersion = $"{APPLICATION_NAME} ({APPLICATION_VERSION})"

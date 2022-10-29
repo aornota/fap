@@ -19,7 +19,6 @@ let private NO_ERRORS = "- no errors -"
 [<Literal>]
 let private TIMESTAMP_FORMAT = "yyyy-MM-dd 'at' HH:mm:ss.fff"
 
-// TODO-NMB: Add icons (e.g. MenuItem.icon (Image.FromImageAsset "select-files.png"))?...
 let private menu state dispatch =
     let sessionMenu =
         let canChangeSession =
@@ -45,7 +44,7 @@ let private menu state dispatch =
                   MenuItem.fontSize 12.
                   MenuItem.isEnabled (summary.SessionId <> state.Session.Id)
                   // TODO-NMB: Seems to trigger twice? And sometimes with wrong SessionId (e.g. after adding new Session)?...
-                  MenuItem.onClick (fun args -> dispatch (OpenSession summary.SessionId)) ]
+                  MenuItem.onClick (fun args -> dispatch (OnOpenSession summary.SessionId)) ]
             :> IView
 
         let sessionItems =
@@ -76,7 +75,7 @@ let private menu state dispatch =
                         [ MenuItem.header "New"
                           MenuItem.fontSize 12.
                           MenuItem.isEnabled canChangeSession
-                          MenuItem.onClick (fun _ -> dispatch NewSession) ]
+                          MenuItem.onClick (fun _ -> dispatch OnNewSession) ]
                     MenuItem.create
                         [ MenuItem.header "Open"
                           MenuItem.fontSize 12.
@@ -180,11 +179,6 @@ let view state dispatch =
               TextBlock.foreground COLOUR_INACTIVE
               TextBlock.text state.Session.Name ]
 
-    let trackCount =
-        state.PlaylistsState.Playlists
-        |> List.collect (fun playlist -> Playlists.Transition.tracks playlist)
-        |> List.length
-
     DockPanel.create
         [ DockPanel.verticalAlignment VerticalAlignment.Stretch
           DockPanel.horizontalAlignment HorizontalAlignment.Stretch
@@ -194,6 +188,4 @@ let view state dispatch =
                 if isDebug && state.ShowingErrors then
                     errorsView state.Errors dispatch
                 session
-                if trackCount > 0 then
-                    Player.View.view state.PlayerState (PlayerMsg >> dispatch)
-                Playlists.View.view state.PlaylistsState (PlaylistsMsg >> dispatch) ] ]
+                yield! Playlists.View.view state.PlaylistsState (PlaylistsMsg >> dispatch) ] ]

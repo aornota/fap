@@ -1,10 +1,10 @@
 module Aornota.Fap.Dialogs
 
-open Aornota.Fap.Domain
+(* open Aornota.Fap.Utilities
 open Avalonia.Controls
 open System.Collections.Generic
 
-let getFilesDialog (filters: FileDialogFilter seq option) =
+let filesDialog (filters: FileDialogFilter seq option) =
     let dialog = OpenFileDialog()
 
     let filters =
@@ -19,13 +19,15 @@ let getFilesDialog (filters: FileDialogFilter seq option) =
             seq { filter }
 
     dialog.AllowMultiple <- true
-    dialog.Directory <- "D:\\AUDIO" // TODO-NMB: Make configurable?...
+    // TODO-NMB: Make configurable?...
+    dialog.Directory <- "D:\\AUDIO"
     dialog.Title <- "Select file/s"
     dialog.Filters <- List(filters)
     dialog
 
-let getFolderDialog () =
+let folderDialog () =
     let dialog = OpenFolderDialog()
-    dialog.Directory <- "D:\\AUDIO" // TODO-NMB: Make configurable?...
+    // TODO-NMB: Make configurable?...
+    dialog.Directory <- "D:\\AUDIO"
     dialog.Title <- "Select folder"
-    dialog
+    dialog *)

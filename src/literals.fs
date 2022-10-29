@@ -3,9 +3,9 @@ module Aornota.Fap.Literals
 [<Literal>]
 let APPLICATION_NAME = "fap"
 
-// (pre-α | α | β) | *γ* | δ | ε | ζ | η | θ | ι | κ | λ | μ | ν | ξ | ο | π | ρ) | σ | τ | υ | φ | χ | ψ | ω
+// (pre-α | α | β | γ) | *δ* | ε | ζ | η | θ | ι | κ | λ | μ | ν | ξ | ο | π | ρ) | σ | τ | υ | φ | χ | ψ | ω
 [<Literal>]
-let APPLICATION_VERSION = "γ" // note: also update ..\README.md
+let APPLICATION_VERSION = "δ" // note: also update ..\README.md
 
 // #region Colours
 [<Literal>]
@@ -42,14 +42,6 @@ let COLOUR_DISABLED_ICON = "#404040"
 let COLOUR_DISABLED_TEXT = "#c0c0c0" // silver
 // #endregion
 
-// #region Folders
-[<Literal>]
-let FOLDER_SESSIONS = "sessions"
-
-[<Literal>]
-let FOLDER_PLAYLISTS = "playlists"
-// #endregion
-
 // #region File extensions
 [<Literal>]
 let FILE_EXTENSION_PREFERENCES = "fapper"
@@ -68,6 +60,34 @@ let FILE_EXTENSION_MP3 = "mp3"
 
 [<Literal>]
 let FILE_EXTENSION_WAV = "wav"
+// #endregion
+
+// #region Folders
+[<Literal>]
+let FOLDER_SESSIONS = "sessions"
+
+[<Literal>]
+let FOLDER_PLAYLISTS = "playlists"
+// #endregion
+
+// #region Icon variants
+[<Literal>]
+let ICON_VARIANT_ACTIVE = "active"
+
+[<Literal>]
+let ICON_VARIANT_INACTIVE = "inactive"
+
+[<Literal>]
+let ICON_VARIANT_AWAITING = "awaiting"
+
+[<Literal>]
+let ICON_VARIANT_ERRORED = "errored"
+
+[<Literal>]
+let ICON_VARIANT_DISABLED = "disabled"
+
+[<Literal>]
+let ICON_VARIANT_MUTED = "muted"
 // #endregion
 
 // #region Sizes
