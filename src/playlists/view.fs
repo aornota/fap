@@ -344,11 +344,12 @@ let private playerView state dispatch =
               [ progressBar state.TrackState colour dispatch
                 trackDetails state.TrackState colour
                 media state dispatch ] ]
+    :> IView
 
 let view state dispatch =
     let trackCount =
         state.Playlists |> List.collect (fun playlist -> tracks playlist) |> List.length
 
-    [ playlistsView state dispatch
-      if trackCount > 0 then
-          playerView state dispatch ]
+    [ if trackCount > 0 then
+          playerView state dispatch
+      playlistsView state dispatch ]
