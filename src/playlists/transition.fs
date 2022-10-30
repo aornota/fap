@@ -8,6 +8,16 @@ open LibVLCSharp.Shared
 open System
 open System.IO
 
+type Direction =
+    | Left
+    | Right
+    | Up
+    | Down
+
+type RelativePosition =
+    | Above
+    | Below
+
 type ExternalMsg =
     | NotifyPlaylistsChanged
     | NotifyTrackStateChanged
@@ -28,6 +38,11 @@ type Msg =
     | RequestNoTrack
     // UI
     | OnSelectPlaylist of PlaylistId
+    | OnMovePlaylist of PlaylistId * Direction
+    | OnRemovePlaylist of PlaylistId
+    | OnMoveTrack of TrackId * Direction
+    | OnAddSummary of TrackId * RelativePosition
+    | OnRemoveTrack of TrackId
     | OnPlayTrack of TrackId
     | OnSeek of float32
     | OnPrevious
@@ -52,7 +67,7 @@ let private DEBOUNCE_SEEK_REQUEST_DELAY = 250
 let private playlist playlists playlistId =
     playlists |> List.tryFind (fun otherPlaylist -> otherPlaylist.Id = playlistId)
 
-let private isTrackId trackId =
+let isTrackId trackId =
     function
     | Track track when track.Id = trackId -> true
     | _ -> false
@@ -125,7 +140,9 @@ let private playTrack track (player: MediaPlayer) =
     use media = new Media(libvlc, path, FromType.FromPath)
     player.Play media |> ignore
 
-let init playlistIds lastTrackId muted volume autoPlay =
+let init playlistIds lastTrackId muted volume autoPlay (player: MediaPlayer) =
+    player.Media <- null
+
     { Playlists = []
       SelectedPlaylistId = None
       Muted = muted
@@ -329,6 +346,31 @@ let transition msg state (player: MediaPlayer) =
         | None -> notifyError $"{nameof (DebounceSeekRequest)} when trackState is {nameof (None)}"
     // From UI
     | OnSelectPlaylist playlistId -> { state with SelectedPlaylistId = Some playlistId }, Cmd.none, []
+
+    | OnMovePlaylist (playlistId, direction) ->
+        // TODO-NMB: Call (external) NotifyPlaylistsChanged...
+        match direction with
+        | Left ->
+            // TODO-NMB...
+            noChange
+        | Right ->
+            // TODO-NMB...
+            noChange
+        | _ -> notifyError $"{nameof (OnMovePlaylist)} ({playlistId}) when {nameof (Direction)} is {direction}"
+    | OnRemovePlaylist playlistId ->
+        // TODO-NMB: Handle case where TrackState is for removed Playlist - and call (external) NotifyPlaylistsChanged...
+        noChange
+    | OnMoveTrack (trackId, direction) ->
+        // TODO-NMB: For Up | Down, squash consecutive Summary items and update Has[Previous|Next] for TrackState (if necessary) - and call WritePlaylist...
+        // TODO-NMB: For Left | Right, add at Bottom (along with Summary?) and update Has[Previous|Next] for TrackState (if necessary) - and call WritePlaylist (for both affected Playlists)...
+        noChange
+    | OnAddSummary (trackId, relativePosition) ->
+        // TODO-NMB: Squash consecutive Summary items (should never happen?) - and call WritePlaylist...
+        noChange
+    | OnRemoveTrack trackId ->
+        // TODO-NMB: Handle case where TrackState is for removed Track - and call WritePlaylist...
+        noChange
+
     | OnPlayTrack trackId ->
         match findTrack state.Playlists trackId with
         | Ok (playlist, trackData) ->

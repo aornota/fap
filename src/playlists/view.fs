@@ -12,15 +12,29 @@ open Avalonia.FuncUI.Types
 open Avalonia.Layout
 open Avalonia.Media
 
+type private TrackForView =
+    { TrackData: TrackData
+      Colour: string
+      CanMove: Direction list
+      CanAddSummary: RelativePosition option }
+
+type private TotalType =
+    | Complete
+    | Partial
+
+type private SummaryForView =
+    { TrackCount: int
+      TotalDuration: TotalType * int64<millisecond> }
+
+type private ItemForView =
+    | TrackForView of TrackForView
+    | SummaryForView of SummaryForView
+
 [<Literal>]
 let private NO_PLAYLISTS = "- no playlists -"
 
 [<Literal>]
 let private NO_TRACKS = "- no tracks -"
-
-// TEMP-NMB...
-[<Literal>]
-let private SUMMARY = "- summary -"
 
 [<Literal>]
 let private NO_SELECTED_TRACK = "- no track selected -"
@@ -35,79 +49,242 @@ let private colour playerState =
     | Playing _ -> COLOUR_ACTIVE
     | PlaybackErrored -> COLOUR_ERROR
 
-let private itemsView (items: Item list) (trackState: TrackState option) dispatch =
-    let itemTemplate (item, trackState) =
-        // TODO-NMB: Conditional handling for Track | Summary...
-        let colour, allowPlay =
-            match item with
-            | Track trackData ->
+let private button
+    (fIcon: bool -> string option -> string option -> IView<Canvas>)
+    dock
+    enabled
+    enabledColourOverride
+    disabledColourOverride
+    leftMargin
+    (tip: string)
+    onClick
+    =
+    Button.create
+        [ Button.dock dock
+          Button.width SIZE_BUTTON_WITH_ICON
+          Button.height SIZE_BUTTON_WITH_ICON
+          Button.background COLOUR_BACKGROUND
+          Button.margin (leftMargin, 0, 0, 0)
+          Button.cornerRadius 0
+          Button.content (fIcon enabled enabledColourOverride disabledColourOverride)
+          if enabled then
+              Button.tip tip
+          Button.onClick (if enabled then onClick else ignore) ]
+
+let private transformItems
+    (items: Item list)
+    isFirstPlaylist
+    isLastPlaylist
+    (trackState: TrackState option)
+    : ItemForView list =
+    (* TODO-NMB:
+        -- TrackForView:
+            - CanAddSummary Below if first (but not last) Track [and not followed by explicit Summary>]...
+            - CanAddSummary Above if last (but not first) Track [and not preceded by explicit Summary?]... *)
+
+    match items with
+    | _ :: _ ->
+        let items =
+            match items with
+            | Summary :: t -> t
+            | _ -> items
+
+        let firstItem, lastItem = items |> List.head, items |> List.rev |> List.head
+
+        let items = if lastItem <> Summary then items @ [ Summary ] else items
+
+        let (itemsWithPrevious, _) =
+            items
+            |> List.fold
+                (fun (itemsWithPrevious, previous) item -> (item, previous) :: itemsWithPrevious, Some item)
+                ([], None)
+
+        let (itemsWithPreviousAndNext, _) =
+            itemsWithPrevious
+            |> List.rev
+            |> List.fold
+                (fun (itemsWithPreviousAndNext, next) (item, previous) ->
+                    (item, previous, next) :: itemsWithPreviousAndNext, Some item)
+                ([], None)
+
+        let itemsForView, _ =
+            itemsWithPreviousAndNext
+            |> List.rev
+            |> List.fold
+                (fun (itemsForView, durations) (item, previous, next) ->
+                    match item with
+                    | Track trackData ->
+                        let colour =
+                            match trackState with
+                            | Some trackState when trackData.Id = trackState.Track.Id -> colour trackState.PlayerState
+                            | _ -> COLOUR_DISABLED_TEXT
+
+                        let isFirstItem = isTrackId trackData.Id firstItem
+                        let isLastItem = isTrackId trackData.Id lastItem
+
+                        let canMove = if not isFirstItem then [ Up ] else []
+                        let canMove = if not isLastItem then Down :: canMove else canMove
+                        let canMove = if not isFirstPlaylist then Left :: canMove else canMove
+                        let canMove = if not isLastPlaylist then Right :: canMove else canMove
+
+                        let canAddSummary =
+                            if isFirstItem && not isLastItem && next <> (Some Summary) then
+                                Some Below
+                            else if isLastItem && not isFirstItem && previous <> (Some Summary) then
+                                Some Above
+                            else
+                                None
+
+                        let itemForView =
+                            { TrackData = trackData
+                              Colour = colour
+                              CanMove = canMove
+                              CanAddSummary = canAddSummary }
+
+                        TrackForView itemForView :: itemsForView, trackData.Duration :: durations
+                    | Summary ->
+                        let trackCount = durations.Length
+                        let knownDurations = durations |> List.choose id
+
+                        let totalType =
+                            if trackCount = knownDurations.Length then
+                                Complete
+                            else
+                                Partial
+
+                        let itemForView =
+                            { TrackCount = trackCount
+                              TotalDuration = (totalType, knownDurations |> List.sum) }
+
+                        SummaryForView itemForView :: itemsForView, [])
+                ([], [])
+
+        itemsForView |> List.rev
+    | [] -> []
+
+let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
+    let itemForViewTemplate =
+        function
+        | TrackForView track ->
+            let allowPlay =
                 match trackState with
-                | Some trackState when trackData.Id = trackState.Track.Id ->
-                    colour trackState.PlayerState, trackState.PlayerState <> PlaybackErrored
-                | _ -> COLOUR_DISABLED_TEXT, true
-            | Summary -> COLOUR_SUMMARY, false
+                | Some trackState when track.TrackData.Id = trackState.Track.Id ->
+                    trackState.PlayerState <> PlaybackErrored
+                | _ -> true
 
-        let durationText, durationColour =
-            match item with
-            | Track trackData ->
-                let colour =
-                    match trackData.Duration with
-                    | Some _ -> colour
-                    | None -> COLOUR_DISABLED_TEXT
+            let durationText = durationText track.TrackData.Duration
 
-                durationText trackData.Duration, colour
-            | Summary -> "", COLOUR_INACTIVE
+            let durationColour =
+                match track.TrackData.Duration with
+                | Some _ -> track.Colour
+                | None -> COLOUR_DISABLED_TEXT
 
-        let itemText, onDoubleTapped =
-            match item with
-            | Track trackData ->
-                trackData.Name,
-                if allowPlay then
-                    (fun _ -> dispatch (OnPlayTrack trackData.Id))
-                else
-                    ignore
-            | Summary -> SUMMARY, ignore
+            let moveUpOrAddBelow =
+                match track.CanAddSummary with
+                | Some Below ->
+                    button Icons.addBelow Dock.Left true (Some COLOUR_SUMMARY) None 0 "Add summary below" (fun _ ->
+                        dispatch (OnAddSummary(track.TrackData.Id, Below)))
+                | _ ->
+                    button
+                        Icons.up
+                        Dock.Left
+                        (track.CanMove |> List.contains Up)
+                        (Some track.Colour)
+                        None
+                        0
+                        "Move track up"
+                        (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Up)))
 
-        DockPanel.create
-            [ DockPanel.verticalAlignment VerticalAlignment.Stretch
-              DockPanel.horizontalAlignment HorizontalAlignment.Stretch
-              DockPanel.lastChildFill true
-              DockPanel.children
-                  [
-                    (* Button.create
-                        [ Button.dock Dock.Right
-                          Button.width SIZE_BUTTON_WITH_ICON
-                          Button.height SIZE_BUTTON_WITH_ICON
-                          Button.background COLOUR_BACKGROUND
-                          Button.cornerRadius 0
-                          Button.margin (10, 0, 0, 0)
-                          Button.content (Icons.remove true (Some COLOUR_INACTIVE) None)
-                          Button.tip "Remove error"
-                          Button.onClick (fun _ -> dispatch (RemoveTrack errorId)) ] *)
-                    TextBlock.create
-                        [ TextBlock.dock Dock.Right
-                          TextBlock.verticalAlignment VerticalAlignment.Center
-                          TextBlock.textAlignment TextAlignment.Right
-                          TextBlock.width 40.
-                          TextBlock.fontSize 12.
-                          TextBlock.foreground durationColour
-                          TextBlock.text durationText ]
-                    TextBlock.create
-                        [ TextBlock.verticalAlignment VerticalAlignment.Center
-                          TextBlock.textAlignment TextAlignment.Left
-                          TextBlock.fontSize 12.
-                          TextBlock.foreground colour
-                          TextBlock.text itemText
-                          TextBlock.onDoubleTapped onDoubleTapped ] ] ]
+            let moveDownOrAddAbove =
+                match track.CanAddSummary with
+                | Some Above ->
+                    button Icons.addAbove Dock.Left true (Some COLOUR_SUMMARY) None 0 "Add summary above" (fun _ ->
+                        dispatch (OnAddSummary(track.TrackData.Id, Above)))
+                | _ ->
+                    button
+                        Icons.down
+                        Dock.Left
+                        (track.CanMove |> List.contains Down)
+                        (Some track.Colour)
+                        None
+                        0
+                        "Move track down"
+                        (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Down)))
 
-    // TODO-NMB: Transform items (e.g. to TrackDataView | SummaryView) - which should remove need for workaround to prevent weird "player status" cache-ing behaviour?...
+            DockPanel.create
+                [ DockPanel.verticalAlignment VerticalAlignment.Stretch
+                  DockPanel.horizontalAlignment HorizontalAlignment.Stretch
+                  DockPanel.lastChildFill true
+                  DockPanel.children
+                      [ moveUpOrAddBelow
+                        moveDownOrAddAbove
+                        button Icons.remove Dock.Right true (Some COLOUR_REMOVE) None 6 "Remove track" (fun _ ->
+                            dispatch (OnRemoveTrack track.TrackData.Id))
+                        button
+                            Icons.right
+                            Dock.Right
+                            (track.CanMove |> List.contains Right)
+                            (Some track.Colour)
+                            None
+                            0
+                            "Move track right"
+                            (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Right)))
+                        button
+                            Icons.left
+                            Dock.Right
+                            (track.CanMove |> List.contains Left)
+                            (Some track.Colour)
+                            None
+                            12
+                            "Move track left"
+                            (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Left)))
+                        TextBlock.create
+                            [ TextBlock.dock Dock.Right
+                              TextBlock.verticalAlignment VerticalAlignment.Center
+                              TextBlock.textAlignment TextAlignment.Right
+                              TextBlock.width 40.
+                              TextBlock.fontSize 12.
+                              TextBlock.foreground durationColour
+                              TextBlock.text durationText ]
+                        TextBlock.create
+                            [ TextBlock.verticalAlignment VerticalAlignment.Center
+                              TextBlock.textAlignment TextAlignment.Left
+                              TextBlock.fontSize 12.
+                              TextBlock.margin (12, 0, 0, 0)
+                              TextBlock.foreground track.Colour
+                              TextBlock.text track.TrackData.Name
+                              if allowPlay then
+                                  TextBlock.onDoubleTapped (fun _ -> dispatch (OnPlayTrack track.TrackData.Id)) ] ] ]
+            :> IView
+        | SummaryForView summary ->
+            let (totalType, duration) = summary.TotalDuration
+            let durationText = durationText (Some duration)
+
+            let durationText =
+                match totalType with
+                | Complete -> durationText
+                | Partial -> $"({durationText})+"
+
+            let summaryText =
+                $"""{summary.TrackCount} {plural "track" summary.TrackCount} | {durationText}"""
+
+            TextBlock.create
+                [ TextBlock.verticalAlignment VerticalAlignment.Center
+                  TextBlock.textAlignment TextAlignment.Center
+                  TextBlock.fontSize 12.
+                  TextBlock.fontWeight FontWeight.DemiBold
+                  TextBlock.foreground COLOUR_SUMMARY
+                  TextBlock.text summaryText ]
+
     ListBox.create
         [ ListBox.dock Dock.Top
           ListBox.background COLOUR_BACKGROUND
-          ListBox.dataItems (items |> List.map (fun item -> item, trackState))
-          ListBox.itemTemplate (DataTemplateView<Item * TrackState option>.create (fun item -> itemTemplate item)) ]
+          ListBox.dataItems (transformItems items isFirstPlaylist isLastPlaylist trackState)
+          ListBox.itemTemplate (
+              DataTemplateView<ItemForView>.create (fun itemForView -> itemForViewTemplate itemForView)
+          ) ]
 
-let private playlistTab selectedPlaylistId trackState dispatch playlist : IView =
+let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState dispatch playlist : IView =
     let colour =
         match trackState with
         | Some trackState ->
@@ -117,9 +294,40 @@ let private playlistTab selectedPlaylistId trackState dispatch playlist : IView 
                 COLOUR_DISABLED_TEXT
         | None -> COLOUR_DISABLED_TEXT
 
+    let isFirstPlaylist = playlist.Id = fst firstAndLastPlaylistIds
+    let isLastPlaylist = playlist.Id = snd firstAndLastPlaylistIds
+
+    let controls =
+        DockPanel.create
+            [ DockPanel.dock Dock.Top
+              DockPanel.verticalAlignment VerticalAlignment.Stretch
+              DockPanel.horizontalAlignment HorizontalAlignment.Stretch
+              DockPanel.lastChildFill false
+              DockPanel.children
+                  [ button
+                        Icons.left
+                        Dock.Left
+                        (not isFirstPlaylist)
+                        (Some COLOUR_INACTIVE)
+                        None
+                        0
+                        "Move playlist left"
+                        (fun _ -> dispatch (OnMovePlaylist(playlist.Id, Left)))
+                    button
+                        Icons.right
+                        Dock.Left
+                        (not isLastPlaylist)
+                        (Some COLOUR_INACTIVE)
+                        None
+                        0
+                        "Move playlist right"
+                        (fun _ -> dispatch (OnMovePlaylist(playlist.Id, Right)))
+                    button Icons.remove Dock.Right true (Some COLOUR_REMOVE) None 0 "Remove playlist" (fun _ ->
+                        dispatch (OnRemovePlaylist playlist.Id)) ] ]
+
     let content =
         match playlist.Items with
-        | _ :: _ -> itemsView playlist.Items trackState dispatch :> IView
+        | _ :: _ -> itemsView playlist.Items isFirstPlaylist isLastPlaylist trackState dispatch :> IView
         | [] ->
             TextBlock.create
                 [ TextBlock.verticalAlignment VerticalAlignment.Top
@@ -130,26 +338,33 @@ let private playlistTab selectedPlaylistId trackState dispatch playlist : IView 
                   TextBlock.foreground COLOUR_DISABLED_TEXT
                   TextBlock.text NO_TRACKS ]
 
+    let controlsAndContent =
+        DockPanel.create
+            [ DockPanel.verticalAlignment VerticalAlignment.Stretch
+              DockPanel.horizontalAlignment HorizontalAlignment.Stretch
+              DockPanel.lastChildFill true
+              DockPanel.children [ controls; content ] ]
+
     TabItem.create
         [ TabItem.header playlist.Name
           TabItem.foreground colour
           TabItem.fontSize 13.
           TabItem.isSelected (Some playlist.Id = selectedPlaylistId)
-          TabItem.content content
-          // TODO-NMB: Seems to trigger for first tab even if not selected?...
-          TabItem.onIsSelectedChanged (fun selected ->
-              if selected then
-                  dispatch (OnSelectPlaylist playlist.Id)) ]
+          TabItem.content controlsAndContent
+          TabItem.onTapped (fun _ -> dispatch (OnSelectPlaylist playlist.Id)) ]
 
-let private playlistsView state dispatch =
-    match state.Playlists with
+let private playlistsView playlists selectedPlaylistId trackState dispatch =
+    match playlists with
     | _ :: _ ->
+        let firstAndLastPlaylistIds =
+            (playlists |> List.head).Id, (playlists |> List.rev |> List.head).Id
+
         TabControl.create
             [ TabControl.dock Dock.Top
               TabControl.tabStripPlacement Dock.Top
               TabControl.viewItems (
-                  state.Playlists
-                  |> List.map (playlistTab state.SelectedPlaylistId state.TrackState dispatch)
+                  playlists
+                  |> List.map (playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState dispatch)
               ) ]
         :> IView
     | [] ->
@@ -352,4 +567,4 @@ let view state dispatch =
 
     [ if trackCount > 0 then
           playerView state dispatch
-      playlistsView state dispatch ]
+      playlistsView state.Playlists state.SelectedPlaylistId state.TrackState dispatch ]

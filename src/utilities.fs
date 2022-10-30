@@ -86,6 +86,8 @@ let playerVolume (volume: int) =
     | 0 -> 0
     | volume -> Math.Log10(volume) * 50. |> int
 
+let plural text count = if count = 1 then text else $"{text}s"
+
 let fileExtensions = [ FILE_EXTENSION_FLAC; FILE_EXTENSION_MP3; FILE_EXTENSION_WAV ]
 
 let isDebug =

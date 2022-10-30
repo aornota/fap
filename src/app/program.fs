@@ -46,7 +46,7 @@ type AppWindow(preferences, session: Session, sessionIds, playlistIds, startupEr
         player.Volume <- playerVolume preferences.Volume
 
         let init _ =
-            init preferences session sessionIds playlistIds startupErrors
+            init preferences session sessionIds playlistIds startupErrors player
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif

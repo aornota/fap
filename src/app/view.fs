@@ -14,6 +14,9 @@ open Avalonia.Media
 open System
 
 [<Literal>]
+let private MENU_ITEM_SEPARATOR = "-"
+
+[<Literal>]
 let private NO_ERRORS = "- no errors -"
 
 [<Literal>]
@@ -35,16 +38,14 @@ let private menu state dispatch =
                     else
                         ""
 
-                let plural = if summary.PlaylistCount <> 1 then "s" else ""
-
-                $"{summary.Name} ({summary.PlaylistCount} playlist{plural}){extra}"
+                $"""{summary.Name} ({summary.PlaylistCount} {plural "playlist" summary.PlaylistCount}){extra}"""
 
             MenuItem.create
                 [ MenuItem.header name
                   MenuItem.fontSize 12.
                   MenuItem.isEnabled (summary.SessionId <> state.Session.Id)
                   // TODO-NMB: Seems to trigger twice? And sometimes with wrong SessionId (e.g. after adding new Session)?...
-                  MenuItem.onClick (fun args -> dispatch (OnOpenSession summary.SessionId)) ]
+                  MenuItem.onClick (fun _ -> dispatch (OnOpenSession summary.SessionId)) ]
             :> IView
 
         let sessionItems =
@@ -81,9 +82,39 @@ let private menu state dispatch =
                           MenuItem.fontSize 12.
                           MenuItem.isEnabled (canChangeSession && sessionItems.Length > 1)
                           MenuItem.viewItems sessionItems ]
+                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
                     settingsMenu ] ]
 
-    // TODO-NMB: playlist(s)Menu...
+    // TODO-NMB: Implement this propertly...
+    let playlistMenu =
+        let playlistItem (summary: PlaylistSummary) =
+            let name =
+                let extra =
+                    if isDebug then
+                        let (Playlists.Model.PlaylistId guid) = summary.PlaylistId
+                        $" [{guid}]"
+                    else
+                        ""
+
+                $"""{summary.Name} ({summary.TrackCount} {plural "track" summary.TrackCount}){extra}"""
+
+            MenuItem.create
+                [ MenuItem.header name
+                  MenuItem.fontSize 12.
+                  // TEMP-NMB...
+                  MenuItem.isEnabled false ]
+            :> IView
+
+        let playlistItems =
+            state.PlaylistSummaries
+            |> List.sortBy (fun summary -> summary.Name)
+            |> List.map playlistItem
+
+        MenuItem.create
+            [ MenuItem.header "Playlist"
+              MenuItem.fontSize 12.
+              MenuItem.foreground COLOUR_DISABLED_TEXT
+              MenuItem.viewItems playlistItems ]
 
     let debugMenu =
         MenuItem.create
@@ -112,6 +143,8 @@ let private menu state dispatch =
         [ Menu.dock Dock.Top
           Menu.viewItems
               [ sessionMenu
+                if isDebug then
+                    playlistMenu
                 if isDebug then
                     debugMenu ] ]
 

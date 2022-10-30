@@ -86,7 +86,7 @@ let private handlePlaylistsExternal msg =
     | Playlists.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
     | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
 
-let init preferences session sessionIds playlistIds (startupErrors: string list) =
+let init preferences session sessionIds playlistIds (startupErrors: string list) (player: MediaPlayer) =
     let playlistsState, playlistsMsg =
         Playlists.Transition.init
             session.PlaylistIds
@@ -94,6 +94,7 @@ let init preferences session sessionIds playlistIds (startupErrors: string list)
             preferences.Muted
             preferences.Volume
             preferences.AutoPlaySession
+            player
 
     { Session = session
       SessionSummaries = []
@@ -181,6 +182,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 state.PlaylistsState.Muted
                 state.PlaylistsState.Volume
                 state.AutoPlaySession
+                player
 
         { state with
             Session = session
@@ -319,6 +321,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 state.PlaylistsState.Muted
                 state.PlaylistsState.Volume
                 state.AutoPlaySession
+                player
 
         { state with
             Session = session
