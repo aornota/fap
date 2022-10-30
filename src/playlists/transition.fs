@@ -73,6 +73,30 @@ let isTrackId trackId =
     | Track track when track.Id = trackId -> true
     | _ -> false
 
+let private findSummary playlists summaryId =
+    let matches =
+        playlists
+        |> List.choose (fun playlist ->
+            let summaryMatches =
+                playlist.Items
+                |> List.choose (fun item ->
+                    match item with
+                    | Summary otherSummaryId when otherSummaryId = Some summaryId -> Some item
+                    | _ -> None)
+
+            match summaryMatches with
+            | _ :: _ -> Some(playlist, summaryMatches)
+            | [] -> None)
+
+    match matches with
+    | [ playlist, summaryMatches ] ->
+        match summaryMatches with
+        | [ _ ] -> Ok playlist
+        | [] -> Error $"no matches for {summaryId} for {nameof (Playlist)} {playlist.Name}"
+        | _ -> Error $"multiple matches for {summaryId} for {nameof (Playlist)} {playlist.Name}"
+    | [] -> Error $"no matches for {summaryId}"
+    | _ -> Error $"matches for {summaryId} for multiple {nameof (Playlist)}s"
+
 let private previousAndNext playlist trackId =
     let tracks = tracks playlist
 
@@ -347,34 +371,111 @@ let transition msg state (player: MediaPlayer) =
         | None -> notifyError $"{nameof (DebounceSeekRequest)} when trackState is {nameof (None)}"
     // From UI
     | OnSelectPlaylist playlistId -> { state with SelectedPlaylistId = Some playlistId }, Cmd.none, []
-
-    | OnMovePlaylist (playlistId, direction) ->
-        // TODO-NMB: Call (external) NotifyPlaylistsChanged...
+    | OnMovePlaylist (playlistId, direction) -> // TODO-NMB: Not working properly - perhaps because of caching weirdness with tabs?...
         match direction with
         | Left ->
-            // TODO-NMB...
-            noChange
+            match state.Playlists |> List.tryFindIndex (fun playlist -> playlist.Id = playlistId) with
+            | Some index ->
+                if index = 0 then
+                    notifyError
+                        $"{nameof (OnMovePlaylist)} {nameof (Left)}: {nameof (Playlist)} {playlistId} already left-most"
+                else
+                    let (_, newPlaylists, _) =
+                        state.Playlists
+                        |> List.fold
+                            (fun (i, newPlaylists, pending) playlist ->
+                                let newPlaylists, pending =
+                                    match pending with
+                                    | Some pending -> playlist :: pending :: newPlaylists, None
+                                    | None when i = index - 1 -> newPlaylists, Some playlist
+                                    | None -> playlist :: newPlaylists, None
+
+                                i + 1, newPlaylists, pending)
+                            (0, [], None)
+
+                    { state with Playlists = newPlaylists }, Cmd.none, [ NotifyPlaylistsChanged ]
+            | None ->
+                notifyError $"{nameof (OnMovePlaylist)} {nameof (Left)}: {nameof (Playlist)} {playlistId} not found"
         | Right ->
-            // TODO-NMB...
-            noChange
+            match state.Playlists |> List.tryFindIndex (fun playlist -> playlist.Id = playlistId) with
+            | Some index ->
+                if index = state.Playlists.Length - 1 then
+                    notifyError
+                        $"{nameof (OnMovePlaylist)} {nameof (Right)}: {nameof (Playlist)} {playlistId} already right-most"
+                else
+                    let (_, newPlaylists, _) =
+                        state.Playlists
+                        |> List.fold
+                            (fun (i, newPlaylists, pending) playlist ->
+                                let newPlaylists, pending =
+                                    match pending with
+                                    | Some pending -> playlist :: pending :: newPlaylists, None
+                                    | None when i = index -> newPlaylists, Some playlist
+                                    | None -> playlist :: newPlaylists, None
+
+                                i + 1, newPlaylists, pending)
+                            (0, [], None)
+
+                    { state with Playlists = newPlaylists }, Cmd.none, [ NotifyPlaylistsChanged ]
+            | None ->
+                notifyError $"{nameof (OnMovePlaylist)} {nameof (Right)}: {nameof (Playlist)} {playlistId} not found"
         | _ -> notifyError $"{nameof (OnMovePlaylist)} ({playlistId}) when {nameof (Direction)} is {direction}"
     | OnRemovePlaylist playlistId ->
         // TODO-NMB: Handle case where TrackState is for removed Playlist - and call (external) NotifyPlaylistsChanged...
         noChange
     | OnMoveTrack (trackId, direction) ->
         // TODO-NMB: For Up | Down, squash consecutive Summary items and update Has[Previous|Next] for TrackState (if necessary) - and call WritePlaylist...
-        // TODO-NMB: For Left | Right, add at Bottom (along with Summary?) and update Has[Previous|Next] for TrackState (if necessary) - and call WritePlaylist (for both affected Playlists)...
+        // TODO-NMB: For Left | Right, add at bottom (along with Summary above?) and update Has[Previous|Next] for TrackState (if necessary) - and call WritePlaylist (for both affected Playlists)...
         noChange
-    | OnAddSummary (trackId, relativePosition) ->
-        // TODO-NMB: Squash consecutive Summary items (should never happen?) - and call WritePlaylist...
-        noChange
+    | OnAddSummary (trackId, relativePosition) -> // TODO-NMB: Squash consecutive Summary items (albeit should never happen?)...
+        match findTrack state.Playlists trackId with
+        | Ok (playlist, _) ->
+            match relativePosition with
+            | Above ->
+                let items = playlist.Items |> List.rev
+
+                match items |> List.head with
+                | Track trackData when trackData.Id = trackId ->
+                    let newItems =
+                        Track trackData :: Summary(Some(SummaryId.Create())) :: (items |> List.tail)
+
+                    match updatePlaylists state.Playlists { playlist with Items = newItems |> List.rev } with
+                    | Ok playlists -> { state with Playlists = playlists }, Cmd.ofMsg (WritePlaylist playlist.Id), []
+                    | Error error -> notifyError $"{nameof (OnAddSummary)} {nameof (Below)}: {error}"
+                | _ ->
+                    notifyError
+                        $"{nameof (OnAddSummary)} {nameof (Above)}: {nameof (Track)} {trackId} is not the last item in the {nameof (Playlist)}"
+            | Below ->
+                match playlist.Items |> List.head with
+                | Track trackData when trackData.Id = trackId ->
+                    let newItems =
+                        Track trackData
+                        :: Summary(Some(SummaryId.Create())) :: (playlist.Items |> List.tail)
+
+                    match updatePlaylists state.Playlists { playlist with Items = newItems } with
+                    | Ok playlists -> { state with Playlists = playlists }, Cmd.ofMsg (WritePlaylist playlist.Id), []
+                    | Error error -> notifyError $"{nameof (OnAddSummary)} {nameof (Below)}: {error}"
+                | _ ->
+                    notifyError
+                        $"{nameof (OnAddSummary)} {nameof (Below)}: {nameof (Track)} {trackId} is not the first item in the {nameof (Playlist)}"
+        | Error error -> notifyError $"{nameof (OnAddSummary)}: {error}"
     | OnRemoveTrack trackId ->
         // TODO-NMB: Handle case where TrackState is for removed Track - and call WritePlaylist...
         noChange
     | OnRemoveSummary summaryId ->
-        // TODO-NMB...
-        noChange
+        match findSummary state.Playlists summaryId with
+        | Ok playlist ->
+            let newItems =
+                playlist.Items
+                |> List.filter (fun item ->
+                    match item with
+                    | Summary otherSummaryId when otherSummaryId = Some summaryId -> false
+                    | _ -> true)
 
+            match updatePlaylists state.Playlists { playlist with Items = newItems } with
+            | Ok playlists -> { state with Playlists = playlists }, Cmd.ofMsg (WritePlaylist playlist.Id), []
+            | Error error -> notifyError $"{nameof (OnRemoveSummary)}: {error}"
+        | Error error -> notifyError $"{nameof (OnRemoveSummary)}: {error}"
     | OnPlayTrack trackId ->
         match findTrack state.Playlists trackId with
         | Ok (playlist, trackData) ->
