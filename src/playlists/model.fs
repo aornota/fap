@@ -17,9 +17,14 @@ type TrackData =
       Name: string
       Duration: int64<millisecond> option }
 
+type SummaryId =
+    | SummaryId of Guid
+
+    static member Create() = SummaryId(Guid.NewGuid())
+
 type Item =
     | Track of TrackData
-    | Summary
+    | Summary of SummaryId option
 
 type PlaylistId =
     | PlaylistId of Guid
@@ -89,7 +94,7 @@ let tracks playlist =
     |> List.choose (fun item ->
         match item with
         | Track trackData -> Some trackData
-        | Summary -> None)
+        | Summary _ -> None)
 
 let findTrack playlists trackId =
     let matches =

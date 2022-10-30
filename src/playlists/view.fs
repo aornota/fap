@@ -23,7 +23,8 @@ type private TotalType =
     | Partial
 
 type private SummaryForView =
-    { TrackCount: int
+    { Id: SummaryId option
+      TrackCount: int
       TotalDuration: TotalType * int64<millisecond> }
 
 type private ItemForView =
@@ -77,21 +78,28 @@ let private transformItems
     isLastPlaylist
     (trackState: TrackState option)
     : ItemForView list =
-    (* TODO-NMB:
-        -- TrackForView:
-            - CanAddSummary Below if first (but not last) Track [and not followed by explicit Summary>]...
-            - CanAddSummary Above if last (but not first) Track [and not preceded by explicit Summary?]... *)
+    let isSummary item =
+        match item with
+        | Some item ->
+            match item with
+            | Summary _ -> true
+            | Track _ -> false
+        | None -> false
 
     match items with
     | _ :: _ ->
         let items =
             match items with
-            | Summary :: t -> t
+            | Summary _ :: t -> t
             | _ -> items
 
         let firstItem, lastItem = items |> List.head, items |> List.rev |> List.head
 
-        let items = if lastItem <> Summary then items @ [ Summary ] else items
+        let items =
+            if not (isSummary (Some lastItem)) then
+                items @ [ Summary None ]
+            else
+                items
 
         let (itemsWithPrevious, _) =
             items
@@ -128,9 +136,9 @@ let private transformItems
                         let canMove = if not isLastPlaylist then Right :: canMove else canMove
 
                         let canAddSummary =
-                            if isFirstItem && not isLastItem && next <> (Some Summary) then
+                            if isFirstItem && not isLastItem && not (isSummary next) then
                                 Some Below
-                            else if isLastItem && not isFirstItem && previous <> (Some Summary) then
+                            else if isLastItem && not isFirstItem && not (isSummary previous) then
                                 Some Above
                             else
                                 None
@@ -142,7 +150,7 @@ let private transformItems
                               CanAddSummary = canAddSummary }
 
                         TrackForView itemForView :: itemsForView, trackData.Duration :: durations
-                    | Summary ->
+                    | Summary summaryId ->
                         let trackCount = durations.Length
                         let knownDurations = durations |> List.choose id
 
@@ -153,7 +161,8 @@ let private transformItems
                                 Partial
 
                         let itemForView =
-                            { TrackCount = trackCount
+                            { Id = summaryId
+                              TrackCount = trackCount
                               TotalDuration = (totalType, knownDurations |> List.sum) }
 
                         SummaryForView itemForView :: itemsForView, [])
@@ -255,7 +264,6 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                               TextBlock.text track.TrackData.Name
                               if allowPlay then
                                   TextBlock.onDoubleTapped (fun _ -> dispatch (OnPlayTrack track.TrackData.Id)) ] ] ]
-            :> IView
         | SummaryForView summary ->
             let (totalType, duration) = summary.TotalDuration
             let durationText = durationText (Some duration)
@@ -268,13 +276,23 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
             let summaryText =
                 $"""{summary.TrackCount} {plural "track" summary.TrackCount} | {durationText}"""
 
-            TextBlock.create
-                [ TextBlock.verticalAlignment VerticalAlignment.Center
-                  TextBlock.textAlignment TextAlignment.Center
-                  TextBlock.fontSize 12.
-                  TextBlock.fontWeight FontWeight.DemiBold
-                  TextBlock.foreground COLOUR_SUMMARY
-                  TextBlock.text summaryText ]
+            DockPanel.create
+                [ DockPanel.verticalAlignment VerticalAlignment.Stretch
+                  DockPanel.horizontalAlignment HorizontalAlignment.Stretch
+                  DockPanel.lastChildFill true
+                  DockPanel.children
+                      [ match summary.Id with
+                        | Some summaryId ->
+                            button Icons.remove Dock.Right true (Some COLOUR_REMOVE) None 6 "Remove summary" (fun _ ->
+                                dispatch (OnRemoveSummary summaryId))
+                        | None -> ()
+                        TextBlock.create
+                            [ TextBlock.verticalAlignment VerticalAlignment.Center
+                              TextBlock.textAlignment TextAlignment.Center
+                              TextBlock.fontSize 12.
+                              TextBlock.fontWeight FontWeight.DemiBold
+                              TextBlock.foreground COLOUR_SUMMARY
+                              TextBlock.text summaryText ] ] ]
 
     ListBox.create
         [ ListBox.dock Dock.Top
@@ -353,7 +371,7 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
           TabItem.content controlsAndContent
           TabItem.onTapped (fun _ -> dispatch (OnSelectPlaylist playlist.Id)) ]
 
-let private playlistsView playlists selectedPlaylistId trackState dispatch =
+let private playlistsView (playlists: Playlist list) selectedPlaylistId trackState dispatch =
     match playlists with
     | _ :: _ ->
         let firstAndLastPlaylistIds =

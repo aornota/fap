@@ -43,6 +43,7 @@ type Msg =
     | OnMoveTrack of TrackId * Direction
     | OnAddSummary of TrackId * RelativePosition
     | OnRemoveTrack of TrackId
+    | OnRemoveSummary of SummaryId
     | OnPlayTrack of TrackId
     | OnSeek of float32
     | OnPrevious
@@ -369,6 +370,9 @@ let transition msg state (player: MediaPlayer) =
         noChange
     | OnRemoveTrack trackId ->
         // TODO-NMB: Handle case where TrackState is for removed Track - and call WritePlaylist...
+        noChange
+    | OnRemoveSummary summaryId ->
+        // TODO-NMB...
         noChange
 
     | OnPlayTrack trackId ->
