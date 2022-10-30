@@ -99,7 +99,7 @@ let private transformItems
             if not (isSummary (Some lastItem)) then
                 items @ [ Summary None ]
             else
-                items
+                Summary None :: (items |> List.rev |> List.tail)
 
         let (itemsWithPrevious, _) =
             items
@@ -109,17 +109,15 @@ let private transformItems
 
         let (itemsWithPreviousAndNext, _) =
             itemsWithPrevious
-            |> List.rev
             |> List.fold
                 (fun (itemsWithPreviousAndNext, next) (item, previous) ->
-                    (item, previous, next) :: itemsWithPreviousAndNext, Some item)
+                    (item, (previous, next)) :: itemsWithPreviousAndNext, Some item)
                 ([], None)
 
         let itemsForView, _ =
             itemsWithPreviousAndNext
-            |> List.rev
             |> List.fold
-                (fun (itemsForView, durations) (item, previous, next) ->
+                (fun (itemsForView, durations) (item, (previous, next)) ->
                     match item with
                     | Track trackData ->
                         let colour =
@@ -283,14 +281,15 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                   DockPanel.children
                       [ match summary.Id with
                         | Some summaryId ->
-                            button Icons.remove Dock.Right true (Some COLOUR_REMOVE) None 6 "Remove summary" (fun _ ->
+                            button Icons.remove Dock.Right true (Some COLOUR_REMOVE) None 0 "Remove summary" (fun _ ->
                                 dispatch (OnRemoveSummary summaryId))
                         | None -> ()
                         TextBlock.create
                             [ TextBlock.verticalAlignment VerticalAlignment.Center
-                              TextBlock.textAlignment TextAlignment.Center
+                              TextBlock.textAlignment TextAlignment.Left
                               TextBlock.fontSize 12.
                               TextBlock.fontWeight FontWeight.DemiBold
+                              TextBlock.margin (72, 0, 0, 0)
                               TextBlock.foreground COLOUR_SUMMARY
                               TextBlock.text summaryText ] ] ]
 
