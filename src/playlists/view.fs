@@ -379,6 +379,7 @@ let private playlistsView (playlists: Playlist list) selectedPlaylistId trackSta
         TabControl.create
             [ TabControl.dock Dock.Top
               TabControl.tabStripPlacement Dock.Top
+              // TODO-NMB: Try using dataItems and itemTemplate (as for ListBox) to see if this resolves "caching" weirdness?...
               TabControl.viewItems (
                   playlists
                   |> List.map (playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState dispatch)

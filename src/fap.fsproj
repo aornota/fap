@@ -25,12 +25,12 @@
     <AvaloniaResource Include="assets\images\**" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia.Desktop" Version="0.10.17" />
-    <PackageReference Include="Avalonia.Diagnostics" Version="0.10.17" />
+    <PackageReference Include="Avalonia.Desktop" Version="0.10.18" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="0.10.18" />
     <PackageReference Include="JaggerJo.Avalonia.FuncUI" Version="0.5.3" />
     <PackageReference Include="JaggerJo.Avalonia.FuncUI.DSL" Version="0.5.3" />
     <PackageReference Include="JaggerJo.Avalonia.FuncUI.Elmish" Version="0.5.3" />
-    <PackageReference Include="LibVLCSharp" Version="3.6.6" />
+    <PackageReference Include="LibVLCSharp" Version="3.6.7" />
     <!-- <PackageReference Include="TagLibSharp" Version="2.3.0" /> -->
     <PackageReference Include="Thoth.Json.Net" Version="8.0.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.17.4" />
