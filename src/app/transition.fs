@@ -6,6 +6,7 @@ open Aornota.Fap.App.Preferences
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Avalonia.Controls
+open Avalonia.Controls.ApplicationLifetimes
 open Avalonia.FuncUI.Hosts
 open Elmish
 open LibVLCSharp.Shared
@@ -38,6 +39,7 @@ type Msg =
     // UI
     | OnNewSession
     | OnOpenSession of SessionId
+    | OnExit
     // From Playlists
     | PlaylistsMsg of Playlists.Transition.Msg
     // From HostWindow subscriptions
@@ -54,6 +56,11 @@ let private DEBOUNCE_WRITE_SESSION_REQUEST_DELAY = 250
 
 [<Literal>]
 let private DEBOUNCE_WRITE_PREFERENCES_REQUEST_DELAY = 250
+
+let private shutdown () =
+    match Avalonia.Application.Current.ApplicationLifetime with
+    | :? IClassicDesktopStyleApplicationLifetime as desktopLifetime -> desktopLifetime.Shutdown 0
+    | _ -> ()
 
 let private makeError error =
     ErrorId.Create(), DateTime.UtcNow, error
@@ -342,6 +349,9 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 AddError $"App.transition -> Unable to read {nameof (Session)} ({guid}): {readErrorText readError}"
 
         state, Cmd.OfAsync.perform read () handleResult
+    | OnExit ->
+        shutdown ()
+        noChange
     // From Playlists
     | PlaylistsMsg playlistsMsg ->
         let newPlaylistState, cmd, externalMsgs =

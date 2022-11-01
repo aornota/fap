@@ -44,8 +44,7 @@ let private menu state dispatch =
                 [ MenuItem.header name
                   MenuItem.fontSize 12.
                   MenuItem.isEnabled (summary.SessionId <> state.Session.Id)
-                  // TODO-NMB: Seems to trigger twice? And sometimes with wrong SessionId (e.g. after adding new Session)?...
-                  MenuItem.onClick (fun _ -> dispatch (OnOpenSession summary.SessionId)) ]
+                  MenuItem.onClick ((fun _ -> dispatch (OnOpenSession summary.SessionId)), OnChangeOf summary.SessionId) ]
             :> IView
 
         let sessionItems =
@@ -83,7 +82,12 @@ let private menu state dispatch =
                           MenuItem.isEnabled (canChangeSession && sessionItems.Length > 1)
                           MenuItem.viewItems sessionItems ]
                     MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
-                    settingsMenu ] ]
+                    settingsMenu
+                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
+                    MenuItem.create
+                        [ MenuItem.header "Exit"
+                          MenuItem.fontSize 12.
+                          MenuItem.onClick (fun _ -> dispatch OnExit) ] ] ]
 
     // TODO-NMB: Implement this propertly...
     let playlistMenu =
@@ -113,31 +117,26 @@ let private menu state dispatch =
         MenuItem.create
             [ MenuItem.header "Playlist"
               MenuItem.fontSize 12.
-              MenuItem.foreground COLOUR_DISABLED_TEXT
+              MenuItem.foreground COLOUR_DEBUG
               MenuItem.viewItems playlistItems ]
 
-    let debugMenu =
+    let errorsMenu =
         MenuItem.create
-            [ MenuItem.header "Debug"
+            [ MenuItem.header $"Errors ({state.Errors.Length})"
               MenuItem.fontSize 12.
-              MenuItem.foreground COLOUR_DEBUG
+              MenuItem.foreground COLOUR_ERROR
+              MenuItem.isEnabled (state.Errors.Length > 0 || state.ShowingErrors)
               MenuItem.viewItems
                   [ MenuItem.create
-                        [ MenuItem.header $"Errors ({state.Errors.Length})"
+                        [ MenuItem.header (if state.ShowingErrors then "Hide" else "Show")
                           MenuItem.fontSize 12.
-                          MenuItem.foreground COLOUR_ERROR
-                          MenuItem.isEnabled (state.Errors.Length > 0 || state.ShowingErrors)
-                          MenuItem.viewItems
-                              [ MenuItem.create
-                                    [ MenuItem.header (if state.ShowingErrors then "Hide" else "Show")
-                                      MenuItem.fontSize 12.
-                                      MenuItem.onClick (fun _ -> dispatch ToggleShowingErrors) ]
-                                MenuItem.create
-                                    [ MenuItem.header "Clear all"
-                                      MenuItem.fontSize 12.
-                                      MenuItem.foreground COLOUR_REMOVE
-                                      MenuItem.isEnabled (state.Errors.Length > 0)
-                                      MenuItem.onClick (fun _ -> dispatch ClearAllErrors) ] ] ] ] ]
+                          MenuItem.onClick (fun _ -> dispatch ToggleShowingErrors) ]
+                    MenuItem.create
+                        [ MenuItem.header "Clear all"
+                          MenuItem.fontSize 12.
+                          MenuItem.foreground COLOUR_REMOVE
+                          MenuItem.isEnabled (state.Errors.Length > 0)
+                          MenuItem.onClick (fun _ -> dispatch ClearAllErrors) ] ] ]
 
     Menu.create
         [ Menu.dock Dock.Top
@@ -145,8 +144,7 @@ let private menu state dispatch =
               [ sessionMenu
                 if isDebug then
                     playlistMenu
-                if isDebug then
-                    debugMenu ] ]
+                    errorsMenu ] ]
 
 let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
     let errorTemplate (errorId, timestamp: DateTime, message) =

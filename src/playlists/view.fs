@@ -50,7 +50,7 @@ let private colour playerState =
     | Playing _ -> COLOUR_ACTIVE
     | PlaybackErrored -> COLOUR_ERROR
 
-let private button
+let private button<'a>
     (fIcon: bool -> string option -> string option -> IView<Canvas>)
     dock
     enabled
@@ -59,6 +59,7 @@ let private button
     leftMargin
     (tip: string)
     onClick
+    (onChangeOf: 'a option)
     =
     Button.create
         [ Button.dock dock
@@ -70,7 +71,10 @@ let private button
           Button.content (fIcon enabled enabledColourOverride disabledColourOverride)
           if enabled then
               Button.tip tip
-          Button.onClick (if enabled then onClick else ignore) ]
+          match enabled, onChangeOf with
+          | true, Some onChangeOf -> Button.onClick (onClick, OnChangeOf onChangeOf)
+          | true, None -> Button.onClick onClick
+          | _ -> () ]
 
 let private transformItems
     (items: Item list)
@@ -189,8 +193,16 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
             let moveUpOrAddBelow =
                 match track.CanAddSummary with
                 | Some Below ->
-                    button Icons.addBelow Dock.Left true (Some COLOUR_SUMMARY) None 0 "Add summary below" (fun _ ->
-                        dispatch (OnAddSummary(track.TrackData.Id, Below)))
+                    button
+                        Icons.addBelow
+                        Dock.Left
+                        true
+                        (Some COLOUR_SUMMARY)
+                        None
+                        0
+                        "Add summary below"
+                        (fun _ -> dispatch (OnAddSummary(track.TrackData.Id, Below)))
+                        (Some track.TrackData.Id)
                 | _ ->
                     button
                         Icons.up
@@ -201,12 +213,21 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         0
                         "Move track up"
                         (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Up)))
+                        (Some track.TrackData.Id)
 
             let moveDownOrAddAbove =
                 match track.CanAddSummary with
                 | Some Above ->
-                    button Icons.addAbove Dock.Left true (Some COLOUR_SUMMARY) None 0 "Add summary above" (fun _ ->
-                        dispatch (OnAddSummary(track.TrackData.Id, Above)))
+                    button
+                        Icons.addAbove
+                        Dock.Left
+                        true
+                        (Some COLOUR_SUMMARY)
+                        None
+                        0
+                        "Add summary above"
+                        (fun _ -> dispatch (OnAddSummary(track.TrackData.Id, Above)))
+                        (Some track.TrackData.Id)
                 | _ ->
                     button
                         Icons.down
@@ -217,16 +238,31 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         0
                         "Move track down"
                         (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Down)))
+                        (Some track.TrackData.Id)
 
             DockPanel.create
                 [ DockPanel.verticalAlignment VerticalAlignment.Stretch
                   DockPanel.horizontalAlignment HorizontalAlignment.Stretch
                   DockPanel.lastChildFill true
+                  DockPanel.background Brushes.Transparent
+                  if allowPlay then
+                      DockPanel.onDoubleTapped (
+                          (fun _ -> dispatch (OnPlayTrack track.TrackData.Id)),
+                          OnChangeOf track.TrackData.Id
+                      )
                   DockPanel.children
                       [ moveUpOrAddBelow
                         moveDownOrAddAbove
-                        button Icons.remove Dock.Right true (Some COLOUR_REMOVE) None 6 "Remove track" (fun _ ->
-                            dispatch (OnRemoveTrack track.TrackData.Id))
+                        button
+                            Icons.remove
+                            Dock.Right
+                            true
+                            (Some COLOUR_REMOVE)
+                            None
+                            6
+                            "Remove track"
+                            (fun _ -> dispatch (OnRemoveTrack track.TrackData.Id))
+                            (Some track.TrackData.Id)
                         button
                             Icons.right
                             Dock.Right
@@ -236,6 +272,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                             0
                             "Move track right"
                             (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Right)))
+                            (Some track.TrackData.Id)
                         button
                             Icons.left
                             Dock.Right
@@ -245,6 +282,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                             12
                             "Move track left"
                             (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Left)))
+                            (Some track.TrackData.Id)
                         TextBlock.create
                             [ TextBlock.dock Dock.Right
                               TextBlock.verticalAlignment VerticalAlignment.Center
@@ -255,13 +293,12 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                               TextBlock.text durationText ]
                         TextBlock.create
                             [ TextBlock.verticalAlignment VerticalAlignment.Center
+                              TextBlock.horizontalAlignment HorizontalAlignment.Stretch
                               TextBlock.textAlignment TextAlignment.Left
                               TextBlock.fontSize 12.
                               TextBlock.margin (12, 0, 0, 0)
                               TextBlock.foreground track.Colour
-                              TextBlock.text track.TrackData.Name
-                              if allowPlay then
-                                  TextBlock.onDoubleTapped (fun _ -> dispatch (OnPlayTrack track.TrackData.Id)) ] ] ]
+                              TextBlock.text track.TrackData.Name ] ] ]
         | SummaryForView summary ->
             let (totalType, duration) = summary.TotalDuration
             let durationText = durationText (Some duration)
@@ -281,8 +318,16 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                   DockPanel.children
                       [ match summary.Id with
                         | Some summaryId ->
-                            button Icons.remove Dock.Right true (Some COLOUR_REMOVE) None 0 "Remove summary" (fun _ ->
-                                dispatch (OnRemoveSummary summaryId))
+                            button
+                                Icons.remove
+                                Dock.Right
+                                true
+                                (Some COLOUR_REMOVE)
+                                None
+                                0
+                                "Remove summary"
+                                (fun _ -> dispatch (OnRemoveSummary summaryId))
+                                (Some summaryId)
                         | None -> ()
                         TextBlock.create
                             [ TextBlock.verticalAlignment VerticalAlignment.Center
@@ -330,6 +375,7 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
                         0
                         "Move playlist left"
                         (fun _ -> dispatch (OnMovePlaylist(playlist.Id, Left)))
+                        (Some playlist.Id)
                     button
                         Icons.right
                         Dock.Left
@@ -339,8 +385,17 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
                         0
                         "Move playlist right"
                         (fun _ -> dispatch (OnMovePlaylist(playlist.Id, Right)))
-                    button Icons.remove Dock.Right true (Some COLOUR_REMOVE) None 0 "Remove playlist" (fun _ ->
-                        dispatch (OnRemovePlaylist playlist.Id)) ] ]
+                        (Some playlist.Id)
+                    button
+                        Icons.remove
+                        Dock.Right
+                        true
+                        (Some COLOUR_REMOVE)
+                        None
+                        0
+                        "Remove playlist"
+                        (fun _ -> dispatch (OnRemovePlaylist playlist.Id))
+                        (Some playlist.Id) ] ]
 
     let content =
         match playlist.Items with
@@ -362,13 +417,19 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
               DockPanel.lastChildFill true
               DockPanel.children [ controls; content ] ]
 
+    (* Note not using TabItem.headerTemplate because:
+         - SubPatchOptions.OnChangeOf did not seem to work for Buttons in a TabItem header (e.g. seeing behaviour suggesting that onClick functions had "cached" earlier PlaylistId)...
+           ... whereas SubPatchOptions.OnChangeOf appears to work for Buttons elsewhere (and for other controls, e.g. TabItem.onTapped).
+         - TextBlock.text also seemed to be truncated (e.g. when the last child in a DockPanel with Buttons). *)
+
     TabItem.create
         [ TabItem.header playlist.Name
+          //TabItem.headerTemplate (DataTemplateView<string>.create (playlistHeaderTemplate playlist.Id))
           TabItem.foreground colour
           TabItem.fontSize 13.
           TabItem.isSelected (Some playlist.Id = selectedPlaylistId)
           TabItem.content controlsAndContent
-          TabItem.onTapped (fun _ -> dispatch (OnSelectPlaylist playlist.Id)) ]
+          TabItem.onTapped ((fun _ -> dispatch (OnSelectPlaylist playlist.Id)), OnChangeOf playlist.Id) ]
 
 let private playlistsView (playlists: Playlist list) selectedPlaylistId trackState dispatch =
     match playlists with
@@ -379,7 +440,6 @@ let private playlistsView (playlists: Playlist list) selectedPlaylistId trackSta
         TabControl.create
             [ TabControl.dock Dock.Top
               TabControl.tabStripPlacement Dock.Top
-              // TODO-NMB: Try using dataItems and itemTemplate (as for ListBox) to see if this resolves "caching" weirdness?...
               TabControl.viewItems (
                   playlists
                   |> List.map (playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState dispatch)

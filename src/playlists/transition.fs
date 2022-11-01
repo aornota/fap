@@ -36,6 +36,7 @@ type Msg =
     | DebounceSeekRequest of SeekRequestId * float32
     | RequestTrack of trackData: TrackData * hasPrevious: bool * hasNext: bool * play: bool
     | RequestNoTrack
+    | CacheNext of TrackId
     // UI
     | OnSelectPlaylist of PlaylistId
     | OnMovePlaylist of PlaylistId * Direction
@@ -159,10 +160,20 @@ let private updatePlaylists (playlists: Playlist list) (playlist: Playlist) =
     else
         Error $"multiple matches for {playlist.Id} for {nameof (Playlist)}s"
 
-let private playTrack track (player: MediaPlayer) =
+let private media track =
     let path = Path.Combine(track.Folder, track.Name)
     use libvlc = new LibVLC()
-    use media = new Media(libvlc, path, FromType.FromPath)
+    new Media(libvlc, path, FromType.FromPath)
+
+let mutable private nextMedia: (TrackId * Media) option = None
+
+let private playTrack (track: TrackData) (player: MediaPlayer) =
+    let media =
+        match nextMedia with
+        | Some (trackId, media) when trackId = track.Id -> media
+        | _ -> media track
+
+    nextMedia <- None
     player.Play media |> ignore
 
 let init playlistIds lastTrackId muted volume autoPlay (player: MediaPlayer) =
@@ -369,9 +380,21 @@ let transition msg state (player: MediaPlayer) =
                     []
             | _ -> notifyError $"{nameof (DebounceSeekRequest)} when {nameof (PlayerState)} not {nameof (Playing)}"
         | None -> notifyError $"{nameof (DebounceSeekRequest)} when trackState is {nameof (None)}"
+    | CacheNext trackId ->
+        match findTrack state.Playlists trackId with
+        | Ok (playlist, trackData) ->
+            match previousAndNext playlist trackData.Id with
+            | Ok (_, Some next) ->
+                nextMedia <- Some(next.Id, media next)
+                noChange
+            | Ok (_, None) ->
+                notifyError
+                    $"{nameof (OnNext)}: no next track for {trackData.Id} for {nameof (Playlist)} {playlist.Name}"
+            | Error error -> notifyError $"{nameof (CacheNext)}: {error}"
+        | Error error -> notifyError $"{nameof (CacheNext)}: {error}"
     // From UI
     | OnSelectPlaylist playlistId -> { state with SelectedPlaylistId = Some playlistId }, Cmd.none, []
-    | OnMovePlaylist (playlistId, direction) -> // TODO-NMB: Not working properly - perhaps because of caching weirdness with tabs?...
+    | OnMovePlaylist (playlistId, direction) ->
         match direction with
         | Left ->
             match state.Playlists |> List.tryFindIndex (fun playlist -> playlist.Id = playlistId) with
@@ -386,14 +409,14 @@ let transition msg state (player: MediaPlayer) =
                             (fun (i, newPlaylists, pending) playlist ->
                                 let newPlaylists, pending =
                                     match pending with
-                                    | Some pending -> playlist :: pending :: newPlaylists, None
+                                    | Some pending -> pending :: playlist :: newPlaylists, None
                                     | None when i = index - 1 -> newPlaylists, Some playlist
                                     | None -> playlist :: newPlaylists, None
 
                                 i + 1, newPlaylists, pending)
                             (0, [], None)
 
-                    { state with Playlists = newPlaylists }, Cmd.none, [ NotifyPlaylistsChanged ]
+                    { state with Playlists = newPlaylists |> List.rev }, Cmd.none, [ NotifyPlaylistsChanged ]
             | None ->
                 notifyError $"{nameof (OnMovePlaylist)} {nameof (Left)}: {nameof (Playlist)} {playlistId} not found"
         | Right ->
@@ -409,14 +432,14 @@ let transition msg state (player: MediaPlayer) =
                             (fun (i, newPlaylists, pending) playlist ->
                                 let newPlaylists, pending =
                                     match pending with
-                                    | Some pending -> playlist :: pending :: newPlaylists, None
+                                    | Some pending -> pending :: playlist :: newPlaylists, None
                                     | None when i = index -> newPlaylists, Some playlist
                                     | None -> playlist :: newPlaylists, None
 
                                 i + 1, newPlaylists, pending)
                             (0, [], None)
 
-                    { state with Playlists = newPlaylists }, Cmd.none, [ NotifyPlaylistsChanged ]
+                    { state with Playlists = newPlaylists |> List.rev }, Cmd.none, [ NotifyPlaylistsChanged ]
             | None ->
                 notifyError $"{nameof (OnMovePlaylist)} {nameof (Right)}: {nameof (Playlist)} {playlistId} not found"
         | _ -> notifyError $"{nameof (OnMovePlaylist)} ({playlistId}) when {nameof (Direction)} is {direction}"
@@ -427,7 +450,7 @@ let transition msg state (player: MediaPlayer) =
         // TODO-NMB: For Up | Down, update Has[Previous|Next] for TrackState (if necessary) - and squash consecutive Summary items? - and call WritePlaylist...
         // TODO-NMB: For Left | Right, add at bottom (along with Summary above?) and update Has[Previous|Next] for TrackState (if necessary) - and call WritePlaylist (for both affected Playlists)...
         noChange
-    | OnAddSummary (trackId, relativePosition) -> // TODO-NMB: Squash consecutive Summary items (albeit should never happen)?...
+    | OnAddSummary (trackId, relativePosition) ->
         match findTrack state.Playlists trackId with
         | Ok (playlist, _) ->
             match relativePosition with
@@ -694,13 +717,18 @@ let transition msg state (player: MediaPlayer) =
         | Some trackState ->
             match trackState.PlayerState with
             | Playing (currentPosition, _) ->
+                let cmd =
+                    match trackState.HasNext, nextMedia, position > 0.95f with
+                    | true, None, true -> Cmd.ofMsg (CacheNext trackState.Track.Id)
+                    | _ -> Cmd.none
+
                 let newPosition =
                     match state.SeekRequests with
                     | _ :: _ -> currentPosition
                     | [] -> position
 
                 { state with TrackState = Some { trackState with PlayerState = Playing(newPosition, Some position) } },
-                Cmd.none,
+                cmd,
                 []
             | _ -> notifyError $"{nameof (NotifyPositionChanged)} when {nameof (PlayerState)} not {nameof (Playing)}"
         | None -> notifyError $"{nameof (NotifyPositionChanged)} when {nameof (TrackState)} is {nameof (None)}"
