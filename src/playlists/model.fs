@@ -48,8 +48,8 @@ type PlayerState =
 type TrackState =
     { Track: TrackData
       PlayerState: PlayerState
-      HasPrevious: bool
-      HasNext: bool }
+      Previous: TrackData option
+      Next: TrackData option }
 
 type WritePlaylistRequestId =
     | WritePlaylistRequestId of Guid
@@ -78,7 +78,7 @@ let START_POSITION = 0f
 
 let private playlistFile (PlaylistId guid) = $"{guid}.{fileExtension Playlist}"
 
-let newPLaylist () =
+let newPlaylist () =
     { Id = PlaylistId.Create()
       Name = NEW_PLAYLIST
       Items = [] }
@@ -88,6 +88,11 @@ let readPlaylist playlistId =
 
 let writePlaylist playlist =
     async { return! write Playlist (playlistFile playlist.Id) playlist }
+
+let isTrackId trackId =
+    function
+    | Track track when track.Id = trackId -> true
+    | _ -> false
 
 let tracks playlist =
     playlist.Items

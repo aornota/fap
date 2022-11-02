@@ -548,16 +548,17 @@ let private media state dispatch =
     let isPlayingOrAwaitingPlay, allowPrevious, allowNext, allowPlay, playDisabledColourOverride, allowPause, allowStop =
         match state.TrackState with
         | Some trackState ->
+            let allowPrevious, allowNext =
+                trackState.Previous |> Option.isSome, trackState.Next |> Option.isSome
+
             match trackState.PlayerState with
-            | NoMedia -> false, trackState.HasPrevious, trackState.HasNext, true, None, false, false
-            | AwaitingPlay _ ->
-                true, trackState.HasPrevious, trackState.HasNext, false, Some COLOUR_AWAITING, false, false
-            | PlaybackErrored ->
-                false, trackState.HasPrevious, trackState.HasNext, false, Some COLOUR_ERROR, false, false
-            | Playing _ -> true, trackState.HasPrevious, trackState.HasNext, false, None, true, true
-            | Paused _ -> false, trackState.HasPrevious, trackState.HasNext, true, None, false, true
+            | NoMedia -> false, allowPrevious, allowNext, true, None, false, false
+            | AwaitingPlay _ -> true, allowPrevious, allowNext, false, Some COLOUR_AWAITING, false, false
+            | PlaybackErrored -> false, allowPrevious, allowNext, false, Some COLOUR_ERROR, false, false
+            | Playing _ -> true, allowPrevious, allowNext, false, None, true, true
+            | Paused _ -> false, allowPrevious, allowNext, true, None, false, true
             | Stopped _
-            | Ended -> false, trackState.HasPrevious, trackState.HasNext, true, None, false, false
+            | Ended -> false, allowPrevious, allowNext, true, None, false, false
         | None -> false, false, false, false, None, false, false
 
     let previousAndNextEnabledColourOverride =
