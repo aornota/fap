@@ -447,7 +447,7 @@ let transition msg state (player: MediaPlayer) =
 
                     let newPlaylist = { playlist with Items = newItems |> List.rev |> sanitize }
 
-                    let trackStateForSamePlaylist =
+                    let trackStateForPlaylist =
                         match state.TrackState with
                         | Some trackState ->
                             if
@@ -463,12 +463,12 @@ let transition msg state (player: MediaPlayer) =
 
                     match updatePlaylists state.Playlists newPlaylist with
                     | Ok playlists ->
-                        match trackStateForSamePlaylist with
-                        | Some trackStateForSamePlaylist ->
-                            match previousAndNext newPlaylist trackStateForSamePlaylist.Track.Id with
+                        match trackStateForPlaylist with
+                        | Some trackStateForPlaylist ->
+                            match previousAndNext newPlaylist trackStateForPlaylist.Track.Id with
                             | Ok (previous, next) ->
                                 let newTrackState =
-                                    { trackStateForSamePlaylist with
+                                    { trackStateForPlaylist with
                                         Previous = previous
                                         Next = next }
 
@@ -483,9 +483,85 @@ let transition msg state (player: MediaPlayer) =
             | _ ->
                 notifyError $"{nameof (OnMoveTrack)} {verticalDirection}: {nameof (Track)} ({trackData.Id}) not found"
         | Error error -> notifyError $"{nameof (OnMoveTrack)} {verticalDirection}: {error}"
-    | OnMoveTrack (trackId, Horizontal horizontalDirection) ->
-        // TODO-NMB: For Left | Right, add at bottom *with Summary above* and update [Previous|Next] for TrackState (if necessary) - and call WritePlaylist (for both affected Playlists)...
-        noChange
+    | OnMoveTrack (trackId, Horizontal (horizontalDirection: HorizontalDirection)) ->
+        match findTrack state.Playlists trackId with
+        | Ok (playlist, trackData) ->
+            match
+                state.Playlists
+                |> List.tryFindIndex (fun otherPlaylist -> otherPlaylist.Id = playlist.Id)
+            with
+            | Some index ->
+                match horizontalDirection, index with
+                | Left, 0 ->
+                    notifyError
+                        $"{nameof (OnMoveTrack)} {horizontalDirection}: {nameof (Track)} {trackData.Id} already for left-most {nameof (Playlist)} {playlist.Id}"
+                | Right, index when index = state.Playlists.Length - 1 ->
+                    notifyError
+                        $"{nameof (OnMoveTrack)} {horizontalDirection}: {nameof (Track)} {trackData.Id} already for right-most {nameof (Playlist)} {playlist.Id}"
+                | _ ->
+                    let otherPlaylist =
+                        match horizontalDirection with
+                        | Left -> state.Playlists[index - 1]
+                        | Right -> state.Playlists[index + 1]
+
+                    let newItems =
+                        playlist.Items
+                        |> List.filter (fun item -> not (isTrackId trackData.Id item))
+                        |> sanitize
+
+                    let newOtherItems =
+                        Track trackData
+                        :: SubTotal(SubTotalId.Create()) :: (otherPlaylist.Items |> List.rev)
+                        |> List.rev
+                        |> sanitize
+
+                    let newPlaylist, newOtherPlaylist =
+                        { playlist with Items = newItems }, { otherPlaylist with Items = newOtherItems }
+
+                    let trackStateForPlaylist =
+                        match state.TrackState with
+                        | Some trackState ->
+                            if
+                                tracks newPlaylist
+                                |> List.exists (fun otherTrackData -> otherTrackData.Id = trackState.Track.Id)
+                            then
+                                Some(trackState, newPlaylist)
+                            else if
+                                tracks newOtherPlaylist
+                                |> List.exists (fun otherTrackData -> otherTrackData.Id = trackState.Track.Id)
+                            then
+                                Some(trackState, newOtherPlaylist)
+                            else
+                                None
+                        | None -> None
+
+                    let writePlaylistCmd = Cmd.ofMsg (WritePlaylist playlist.Id)
+
+                    match updatePlaylists state.Playlists newPlaylist with
+                    | Ok playlists ->
+                        match updatePlaylists playlists newOtherPlaylist with
+                        | Ok playlists ->
+                            match trackStateForPlaylist with
+                            | Some (trackStateForPlaylist, playlist) ->
+                                match previousAndNext playlist trackStateForPlaylist.Track.Id with
+                                | Ok (previous, next) ->
+                                    let newTrackState =
+                                        { trackStateForPlaylist with
+                                            Previous = previous
+                                            Next = next }
+
+                                    { state with
+                                        Playlists = playlists
+                                        TrackState = Some newTrackState },
+                                    writePlaylistCmd,
+                                    []
+                                | Error error -> notifyError $"{nameof (OnMoveTrack)} {horizontalDirection}: {error}"
+                            | None -> { state with Playlists = playlists }, writePlaylistCmd, []
+                        | Error error -> notifyError $"{nameof (OnMoveTrack)}: {horizontalDirection} {error}"
+                    | Error error -> notifyError $"{nameof (OnMoveTrack)}: {horizontalDirection} {error}"
+            | None ->
+                notifyError $"{nameof (OnMoveTrack)} {horizontalDirection}: {nameof (Playlist)} {playlist.Id} not found"
+        | Error error -> notifyError $"{nameof (OnMoveTrack)} {horizontalDirection}: {error}"
     | OnAddSubTotal (trackId, relativePosition) ->
         match findTrack state.Playlists trackId with
         | Ok (playlist, _) ->
@@ -536,10 +612,7 @@ let transition msg state (player: MediaPlayer) =
 
                 let newItems =
                     playlist.Items
-                    |> List.filter (fun item ->
-                        match item with
-                        | Track otherTrackData when otherTrackData.Id = trackData.Id -> false
-                        | _ -> true)
+                    |> List.filter (fun item -> not (isTrackId trackData.Id item))
                     |> sanitize
 
                 let writePlaylistCmd = Cmd.ofMsg (WritePlaylist playlist.Id)
@@ -836,10 +909,9 @@ let transition msg state (player: MediaPlayer) =
             match trackState.PlayerState with
             | Playing _ ->
                 let cmd =
-                    if trackState.Next |> Option.isSome then
-                        Cmd.ofMsg OnNext
-                    else
-                        Cmd.none
+                    match trackState.Next with
+                    | Some _ -> Cmd.ofMsg OnNext
+                    | _ -> Cmd.none
 
                 { state with TrackState = Some { trackState with PlayerState = Ended } },
                 cmd,
