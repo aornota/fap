@@ -17,14 +17,14 @@ type TrackData =
       Name: string
       Duration: int64<millisecond> option }
 
-type SummaryId =
-    | SummaryId of Guid
+type SubTotalId =
+    | SubTotalId of Guid
 
-    static member Create() = SummaryId(Guid.NewGuid())
+    static member Create() = SubTotalId(Guid.NewGuid())
 
 type Item =
     | Track of TrackData
-    | Summary of SummaryId option
+    | SubTotal of SubTotalId
 
 type PlaylistId =
     | PlaylistId of Guid
@@ -99,7 +99,7 @@ let tracks playlist =
     |> List.choose (fun item ->
         match item with
         | Track trackData -> Some trackData
-        | Summary _ -> None)
+        | SubTotal _ -> None)
 
 let findTrack playlists trackId =
     let matches =
@@ -120,10 +120,18 @@ let findTrack playlists trackId =
     | [ playlist, trackMatches ] ->
         match trackMatches with
         | [ trackData ] -> Ok(playlist, trackData)
-        | [] -> Error $"no matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
-        | _ -> Error $"multiple matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
-    | [] -> Error $"no matches for {trackId}"
-    | _ -> Error $"matches for {trackId} for multiple {nameof (Playlist)}s"
+        | [] -> Error $"no {nameof (Track)} matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
+        | _ -> Error $"multiple {nameof (Track)} matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
+    | [] -> Error $"no {nameof (Track)} matches for {trackId}"
+    | _ -> Error $"{nameof (Track)} matches for {trackId} for multiple {nameof (Playlist)}s"
+
+let rec sanitize playlist =
+    match playlist with
+    | SubTotal _ :: t -> t |> sanitize
+    | _ ->
+        match playlist |> List.rev with
+        | SubTotal _ :: t -> t |> List.rev |> sanitize
+        | _ -> playlist
 
 let iconVariant trackState =
     match trackState with

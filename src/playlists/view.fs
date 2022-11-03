@@ -11,6 +11,7 @@ open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
 open Avalonia.Layout
 open Avalonia.Media
+open System
 
 type private TrackForView =
     { TrackData: TrackData
@@ -22,14 +23,19 @@ type private TotalType =
     | Complete
     | Partial
 
-type private SummaryForView =
-    { Id: SummaryId option
+type private SubTotalForView =
+    { Id: SubTotalId option
       TrackCount: int
+      SubTotalDuration: TotalType * int64<millisecond> }
+
+type private TotalForView =
+    { TrackCount: int
       TotalDuration: TotalType * int64<millisecond> }
 
 type private ItemForView =
     | TrackForView of TrackForView
-    | SummaryForView of SummaryForView
+    | SubTotalForView of SubTotalForView
+    | TotalForView of TotalForView
 
 [<Literal>]
 let private NO_PLAYLISTS = "- no playlists -"
@@ -82,28 +88,38 @@ let private transformItems
     isLastPlaylist
     (trackState: TrackState option)
     : ItemForView list =
-    let isSummary item =
+    let isSubTotal item =
         match item with
         | Some item ->
             match item with
-            | Summary _ -> true
+            | SubTotal _ -> true
             | Track _ -> false
         | None -> false
 
+    let trackCountAndtotalDuration (durations: int64<millisecond> option list) =
+        let trackCount = durations.Length
+        let knownDurations = durations |> List.choose id
+
+        let totalType =
+            if trackCount = knownDurations.Length then
+                Complete
+            else
+                Partial
+
+        trackCount, (totalType, knownDurations |> List.sum)
+
+    let autoSubTotalId = SubTotalId(Guid.Empty)
+
     match items with
     | _ :: _ ->
-        let items =
-            match items with
-            | Summary _ :: t -> t
-            | _ -> items
+        let items = items |> sanitize
 
         let firstItem, lastItem = items |> List.head, items |> List.rev |> List.head
 
         let items =
-            if not (isSummary (Some lastItem)) then
-                items @ [ Summary None ]
-            else
-                Summary None :: (items |> List.rev |> List.tail)
+            match items |> List.map Some |> List.exists isSubTotal with
+            | true -> items @ [ SubTotal autoSubTotalId ]
+            | false -> items
 
         let (itemsWithPrevious, _) =
             items
@@ -137,10 +153,10 @@ let private transformItems
                         let canMove = if not isFirstPlaylist then Left :: canMove else canMove
                         let canMove = if not isLastPlaylist then Right :: canMove else canMove
 
-                        let canAddSummary =
-                            if isFirstItem && not isLastItem && not (isSummary next) then
+                        let canAddSubTotal =
+                            if isFirstItem && not isLastItem && not (isSubTotal next) then
                                 Some Below
-                            else if isLastItem && not isFirstItem && not (isSummary previous) then
+                            else if isLastItem && not isFirstItem && not (isSubTotal previous) then
                                 Some Above
                             else
                                 None
@@ -149,31 +165,45 @@ let private transformItems
                             { TrackData = trackData
                               Colour = colour
                               CanMove = canMove
-                              CanAddSummary = canAddSummary }
+                              CanAddSummary = canAddSubTotal }
 
                         TrackForView itemForView :: itemsForView, trackData.Duration :: durations
-                    | Summary summaryId ->
-                        let trackCount = durations.Length
-                        let knownDurations = durations |> List.choose id
-
-                        let totalType =
-                            if trackCount = knownDurations.Length then
-                                Complete
-                            else
-                                Partial
+                    | SubTotal subTotal ->
+                        let trackCount, totalDuration = trackCountAndtotalDuration durations
 
                         let itemForView =
-                            { Id = summaryId
+                            { Id = if subTotal <> autoSubTotalId then Some subTotal else None
                               TrackCount = trackCount
-                              TotalDuration = (totalType, knownDurations |> List.sum) }
+                              SubTotalDuration = totalDuration }
 
-                        SummaryForView itemForView :: itemsForView, [])
+                        SubTotalForView itemForView :: itemsForView, [])
                 ([], [])
 
-        itemsForView |> List.rev
+        let durations =
+            itemsForView
+            |> List.choose (fun item ->
+                match item with
+                | TrackForView track -> Some(track.TrackData.Duration)
+                | _ -> None)
+
+        let trackCount, totalDuration = trackCountAndtotalDuration durations
+
+        let total =
+            { TrackCount = trackCount
+              TotalDuration = totalDuration }
+
+        TotalForView total :: itemsForView |> List.rev
     | [] -> []
 
 let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
+    let totalDurationText totalDuration =
+        let (totalType, duration) = totalDuration
+        let durationText = durationText (Some duration)
+
+        match totalType with
+        | Complete -> durationText
+        | Partial -> $"({durationText})+"
+
     let itemForViewTemplate =
         function
         | TrackForView track ->
@@ -197,11 +227,11 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         Icons.addBelow
                         Dock.Left
                         true
-                        (Some COLOUR_SUMMARY)
+                        (Some COLOUR_SUB_TOTAL)
                         None
                         0
-                        "Add summary below"
-                        (fun _ -> dispatch (OnAddSummary(track.TrackData.Id, Below)))
+                        "Add sub-total below"
+                        (fun _ -> dispatch (OnAddSubTotal(track.TrackData.Id, Below)))
                         (Some track.TrackData.Id)
                 | _ ->
                     button
@@ -222,11 +252,11 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         Icons.addAbove
                         Dock.Left
                         true
-                        (Some COLOUR_SUMMARY)
+                        (Some COLOUR_SUB_TOTAL)
                         None
                         0
-                        "Add summary above"
-                        (fun _ -> dispatch (OnAddSummary(track.TrackData.Id, Above)))
+                        "Add sub-total above"
+                        (fun _ -> dispatch (OnAddSubTotal(track.TrackData.Id, Above)))
                         (Some track.TrackData.Id)
                 | _ ->
                     button
@@ -299,25 +329,17 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                               TextBlock.margin (12, 0, 0, 0)
                               TextBlock.foreground track.Colour
                               TextBlock.text track.TrackData.Name ] ] ]
-        | SummaryForView summary ->
-            let (totalType, duration) = summary.TotalDuration
-            let durationText = durationText (Some duration)
-
-            let durationText =
-                match totalType with
-                | Complete -> durationText
-                | Partial -> $"({durationText})+"
-
-            let summaryText =
-                $"""{summary.TrackCount} {plural "track" summary.TrackCount} | {durationText}"""
+        | SubTotalForView subTotal ->
+            let subTotalText =
+                $"""{subTotal.TrackCount} {plural "track" subTotal.TrackCount} | {totalDurationText subTotal.SubTotalDuration}"""
 
             DockPanel.create
                 [ DockPanel.verticalAlignment VerticalAlignment.Stretch
                   DockPanel.horizontalAlignment HorizontalAlignment.Stretch
                   DockPanel.lastChildFill true
                   DockPanel.children
-                      [ match summary.Id with
-                        | Some summaryId ->
+                      [ match subTotal.Id with
+                        | Some subTotalId ->
                             button
                                 Icons.remove
                                 Dock.Right
@@ -325,9 +347,9 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                                 (Some COLOUR_REMOVE)
                                 None
                                 0
-                                "Remove summary"
-                                (fun _ -> dispatch (OnRemoveSummary summaryId))
-                                (Some summaryId)
+                                "Remove sub-total"
+                                (fun _ -> dispatch (OnRemoveSubTotal subTotalId))
+                                (Some subTotalId)
                         | None -> ()
                         TextBlock.create
                             [ TextBlock.verticalAlignment VerticalAlignment.Center
@@ -335,8 +357,25 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                               TextBlock.fontSize 12.
                               TextBlock.fontWeight FontWeight.DemiBold
                               TextBlock.margin (72, 0, 0, 0)
-                              TextBlock.foreground COLOUR_SUMMARY
-                              TextBlock.text summaryText ] ] ]
+                              TextBlock.foreground COLOUR_SUB_TOTAL
+                              TextBlock.text subTotalText ] ] ]
+        | TotalForView total ->
+            let totalText =
+                $"""{total.TrackCount} {plural "track" total.TrackCount} | {totalDurationText total.TotalDuration}"""
+
+            DockPanel.create
+                [ DockPanel.verticalAlignment VerticalAlignment.Stretch
+                  DockPanel.horizontalAlignment HorizontalAlignment.Stretch
+                  DockPanel.lastChildFill true
+                  DockPanel.children
+                      [ TextBlock.create
+                            [ TextBlock.verticalAlignment VerticalAlignment.Center
+                              TextBlock.textAlignment TextAlignment.Right
+                              TextBlock.fontSize 12.
+                              TextBlock.fontWeight FontWeight.DemiBold
+                              TextBlock.margin (0, 0, 108, 0)
+                              TextBlock.foreground COLOUR_TOTAL
+                              TextBlock.text totalText ] ] ]
 
     ListBox.create
         [ ListBox.dock Dock.Top
