@@ -112,7 +112,7 @@ let private transformItems
 
     match items with
     | _ :: _ ->
-        let items = items |> sanitize
+        let items = items |> sanitize // note: should be superfluous
 
         let firstItem, lastItem = items |> List.head, items |> List.rev |> List.head
 
@@ -148,10 +148,20 @@ let private transformItems
                         let isFirstItem = isTrackId trackData.Id firstItem
                         let isLastItem = isTrackId trackData.Id lastItem
 
-                        let canMove = if not isFirstItem then [ Up ] else []
-                        let canMove = if not isLastItem then Down :: canMove else canMove
-                        let canMove = if not isFirstPlaylist then Left :: canMove else canMove
-                        let canMove = if not isLastPlaylist then Right :: canMove else canMove
+                        let canMove = if not isFirstItem then [ Vertical Up ] else []
+                        let canMove = if not isLastItem then Vertical Down :: canMove else canMove
+
+                        let canMove =
+                            if not isFirstPlaylist then
+                                Horizontal Left :: canMove
+                            else
+                                canMove
+
+                        let canMove =
+                            if not isLastPlaylist then
+                                Horizontal Right :: canMove
+                            else
+                                canMove
 
                         let canAddSubTotal =
                             if isFirstItem && not isLastItem && not (isSubTotal next) then
@@ -204,6 +214,8 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
         | Complete -> durationText
         | Partial -> $"({durationText})+"
 
+    let totalRightMargin = 108
+
     let itemForViewTemplate =
         function
         | TrackForView track ->
@@ -237,12 +249,12 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                     button
                         Icons.up
                         Dock.Left
-                        (track.CanMove |> List.contains Up)
+                        (track.CanMove |> List.contains (Vertical Up))
                         (Some track.Colour)
                         None
                         0
                         "Move track up"
-                        (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Up)))
+                        (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Vertical Up)))
                         (Some track.TrackData.Id)
 
             let moveDownOrAddAbove =
@@ -262,12 +274,12 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                     button
                         Icons.down
                         Dock.Left
-                        (track.CanMove |> List.contains Down)
+                        (track.CanMove |> List.contains (Vertical Down))
                         (Some track.Colour)
                         None
                         0
                         "Move track down"
-                        (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Down)))
+                        (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Vertical Down)))
                         (Some track.TrackData.Id)
 
             DockPanel.create
@@ -296,22 +308,22 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         button
                             Icons.right
                             Dock.Right
-                            (track.CanMove |> List.contains Right)
+                            (track.CanMove |> List.contains (Horizontal Right))
                             (Some track.Colour)
                             None
                             0
                             "Move track right"
-                            (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Right)))
+                            (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Horizontal Right)))
                             (Some track.TrackData.Id)
                         button
                             Icons.left
                             Dock.Right
-                            (track.CanMove |> List.contains Left)
+                            (track.CanMove |> List.contains (Horizontal Left))
                             (Some track.Colour)
                             None
                             12
                             "Move track left"
-                            (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Left)))
+                            (fun _ -> dispatch (OnMoveTrack(track.TrackData.Id, Horizontal Left)))
                             (Some track.TrackData.Id)
                         TextBlock.create
                             [ TextBlock.dock Dock.Right
@@ -333,6 +345,11 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
             let subTotalText =
                 $"""{subTotal.TrackCount} {plural "track" subTotal.TrackCount} | {totalDurationText subTotal.SubTotalDuration}"""
 
+            let totalRightMargin =
+                match subTotal.Id with
+                | Some _ -> totalRightMargin - (SIZE_BUTTON_WITH_ICON |> int)
+                | None -> totalRightMargin
+
             DockPanel.create
                 [ DockPanel.verticalAlignment VerticalAlignment.Stretch
                   DockPanel.horizontalAlignment HorizontalAlignment.Stretch
@@ -353,10 +370,10 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         | None -> ()
                         TextBlock.create
                             [ TextBlock.verticalAlignment VerticalAlignment.Center
-                              TextBlock.textAlignment TextAlignment.Left
+                              TextBlock.textAlignment TextAlignment.Right
                               TextBlock.fontSize 12.
                               TextBlock.fontWeight FontWeight.DemiBold
-                              TextBlock.margin (72, 0, 0, 0)
+                              TextBlock.margin (0, 0, totalRightMargin, 0)
                               TextBlock.foreground COLOUR_SUB_TOTAL
                               TextBlock.text subTotalText ] ] ]
         | TotalForView total ->
@@ -372,8 +389,8 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                             [ TextBlock.verticalAlignment VerticalAlignment.Center
                               TextBlock.textAlignment TextAlignment.Right
                               TextBlock.fontSize 12.
-                              TextBlock.fontWeight FontWeight.DemiBold
-                              TextBlock.margin (0, 0, 108, 0)
+                              TextBlock.fontWeight FontWeight.SemiBold
+                              TextBlock.margin (0, 0, totalRightMargin, 0)
                               TextBlock.foreground COLOUR_TOTAL
                               TextBlock.text totalText ] ] ]
 

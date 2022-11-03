@@ -120,10 +120,10 @@ let findTrack playlists trackId =
     | [ playlist, trackMatches ] ->
         match trackMatches with
         | [ trackData ] -> Ok(playlist, trackData)
-        | [] -> Error $"no {nameof (Track)} matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
-        | _ -> Error $"multiple {nameof (Track)} matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
-    | [] -> Error $"no {nameof (Track)} matches for {trackId}"
-    | _ -> Error $"{nameof (Track)} matches for {trackId} for multiple {nameof (Playlist)}s"
+        | [] -> Error $"no matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
+        | _ -> Error $"multiple matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
+    | [] -> Error $"no matches for {trackId}"
+    | _ -> Error $"matches for {trackId} for multiple {nameof (Playlist)}s"
 
 let rec sanitize playlist =
     match playlist with
