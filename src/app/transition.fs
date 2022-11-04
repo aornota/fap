@@ -35,12 +35,13 @@ type Msg =
     | FilesAdded of string array
     | FolderAdded of string
     | PlaylistDeleted of Playlists.Model.PlaylistId
-    | AddError of string * string option
     | UpdateSessionSummary
+    | UpdatePlaylistSummary of Playlists.Model.Playlist
     | WriteSession
     | DebounceWriteSessionRequest of WriteSessionRequestId
     | WritePreferences of WritePreferencesRequestSource
     | DebounceWritePreferencesRequest of WritePreferencesRequestId * WritePreferencesRequestSource
+    | AddError of string * string option
     // UI
     | OnNewSession
     | OnOpenSession of SessionId
@@ -274,44 +275,39 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
 
             { state with PlaylistSummaries = newPlaylistSummaries }, Cmd.none
         | None -> state, Cmd.ofMsg (AddError($"{nameof (PlaylistDeleted)}: ({playlistId}) not in summaries", None))
-    | AddError (error, nonDebugMessage) ->
-        let maxErrors = 100
-
-        let newError = makeError error nonDebugMessage
-
-        let newErrors =
-            newError
-            :: (if state.Errors.Length > (maxErrors - 1) then
-                    state.Errors |> List.take (maxErrors - 1)
-                else
-                    state.Errors)
-
-        { state with Errors = newErrors }, Cmd.none
     | UpdateSessionSummary ->
-        let newSessionSummary =
-            { SessionId = state.Session.Id
-              Name = state.Session.Name
-              PlaylistCount = state.PlaylistsState.Playlists.Length }
-
         match
             state.SessionSummaries
-            |> List.tryFind (fun summary -> summary.SessionId = newSessionSummary.SessionId)
+            |> List.tryFind (fun summary -> summary.SessionId = state.Session.Id)
         with
-        | Some _ ->
+        | Some summary ->
             let newSessionSummaries =
                 state.SessionSummaries
-                |> List.map (fun summary ->
-                    if summary.SessionId = newSessionSummary.SessionId then
-                        newSessionSummary
+                |> List.map (fun otherSummary ->
+                    if otherSummary.SessionId = summary.SessionId then
+                        { summary with PlaylistCount = state.PlaylistsState.Playlists.Length }
                     else
-                        summary)
+                        otherSummary)
 
             { state with SessionSummaries = newSessionSummaries }, Cmd.ofMsg WriteSession
         | None ->
-            state,
-            Cmd.ofMsg (
-                AddError($"{nameof (UpdateSessionSummary)}: ({newSessionSummary.SessionId}) not in summaries", None)
-            )
+            state, Cmd.ofMsg (AddError($"{nameof (UpdateSessionSummary)}: ({state.Session.Id}) not in summaries", None))
+    | UpdatePlaylistSummary playlist ->
+        match
+            state.PlaylistSummaries
+            |> List.tryFind (fun summary -> summary.PlaylistId = playlist.Id)
+        with
+        | Some summary ->
+            let newPlaylistSummaries =
+                state.PlaylistSummaries
+                |> List.map (fun otherSummary ->
+                    if otherSummary.PlaylistId = summary.PlaylistId then
+                        { summary with TrackCount = Playlists.Model.tracks playlist |> List.length }
+                    else
+                        otherSummary)
+
+            { state with PlaylistSummaries = newPlaylistSummaries }, Cmd.none
+        | None -> state, Cmd.ofMsg (AddError($"{nameof (NewPlaylistAdded)}: ({playlist.Id}) not in summaries", None))
     | WriteSession ->
         let writeSessionRequestId = WriteSessionRequestId.Create()
 
@@ -422,6 +418,19 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 Cmd.OfAsync.perform writePreferences preferences (errorOrNoOp (Some "Unable to write preferences"))
             else
                 { state with WritePreferencesRequests = newWritePreferencesRequests }, Cmd.none
+    | AddError (error, nonDebugMessage) ->
+        let maxErrors = 100
+
+        let newError = makeError error nonDebugMessage
+
+        let newErrors =
+            newError
+            :: (if state.Errors.Length > (maxErrors - 1) then
+                    state.Errors |> List.take (maxErrors - 1)
+                else
+                    state.Errors)
+
+        { state with Errors = newErrors }, Cmd.none
     // UI
     | OnNewSession ->
         let session = newSession ()
@@ -557,6 +566,8 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         let handleExternal externalMsg =
             match externalMsg with
             | Playlists.Transition.ExternalMsg.NotifyNewPlaylistAdded playlist -> Cmd.ofMsg (NewPlaylistAdded playlist)
+            | Playlists.Transition.ExternalMsg.NotifyTracksAddedOrRemoved playlist ->
+                Cmd.ofMsg (UpdatePlaylistSummary playlist)
             | Playlists.Transition.ExternalMsg.NotifyPlaylistsChanged -> Cmd.ofMsg UpdateSessionSummary
             | Playlists.Transition.ExternalMsg.NotifyTrackStateChanged ->
                 Cmd.batch [ Cmd.ofMsg UpdateTitle; Cmd.ofMsg UpdateIcon; Cmd.ofMsg WriteSession ]

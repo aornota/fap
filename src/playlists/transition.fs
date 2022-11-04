@@ -26,6 +26,7 @@ type RelativePosition =
 
 type ExternalMsg =
     | NotifyNewPlaylistAdded of Playlist
+    | NotifyTracksAddedOrRemoved of Playlist
     | NotifyPlaylistsChanged
     | NotifyTrackStateChanged
     | NotifyMutedToggled
@@ -45,6 +46,7 @@ type Msg =
     | RequestTrack of TrackData * Playlist * bool
     | RequestNoTrack
     | AddToPlaylist of TrackData list
+    | UpdatePreviousAndNext of Playlist
     // UI
     | OnSelectPlaylist of PlaylistId
     | OnMovePlaylist of PlaylistId * HorizontalDirection
@@ -360,14 +362,30 @@ let transition msg state (player: MediaPlayer) =
                         let cmd =
                             match requestTrack with
                             | Some trackData ->
-                                Cmd.batch [ writePlaylistCmd; Cmd.ofMsg (RequestTrack(trackData, newPlaylist, false)) ]
-                            | None -> writePlaylistCmd
+                                Cmd.batch [ Cmd.ofMsg (RequestTrack(trackData, newPlaylist, false)); writePlaylistCmd ]
+                            | None -> Cmd.batch [ Cmd.ofMsg (UpdatePreviousAndNext newPlaylist); writePlaylistCmd ]
 
-                        { state with Playlists = playlists }, cmd, []
+                        { state with Playlists = playlists }, cmd, [ NotifyTracksAddedOrRemoved newPlaylist ]
                     | Error error -> notifyError $"{nameof (AddToPlaylist)}: {error}" None
                 | [] -> notifyError $"{nameof (AddToPlaylist)}: no {nameof (Track)}s to add" None
             | None -> notifyError $"{nameof (AddToPlaylist)}: ({playlistId}) not found" None
         | None -> notifyError $"{nameof (AddToPlaylist)} when no selected playlist" None
+    | UpdatePreviousAndNext playlist ->
+        match state.TrackState with
+        | Some trackState ->
+            if playlist.Items |> List.exists (fun item -> isTrackId trackState.Track.Id item) then
+                match previousAndNext playlist trackState.Track.Id with
+                | Ok (previous, next) ->
+                    let newTrackState =
+                        { trackState with
+                            Previous = previous
+                            Next = next }
+
+                    { state with TrackState = Some newTrackState }, Cmd.none, []
+                | Error error -> notifyError $"{nameof (UpdatePreviousAndNext)}: {error}" None
+            else
+                noChange
+        | None -> noChange
     // From UI
     | OnSelectPlaylist playlistId -> { state with SelectedPlaylistId = Some playlistId }, Cmd.none, []
     | OnMovePlaylist (playlistId, horizontalDirection) ->
@@ -662,13 +680,13 @@ let transition msg state (player: MediaPlayer) =
                     | None -> false, false
 
                 let newItems =
-                    playlist.Items
-                    |> List.filter (fun item -> not (isTrackId trackData.Id item))
-                    |> sanitize
+                    playlist.Items |> List.filter (fun item -> not (isTrackId trackData.Id item))
+
+                let newPlaylist = { playlist with Items = newItems |> sanitize }
 
                 let writePlaylistCmd = Cmd.ofMsg (WritePlaylist playlist.Id)
 
-                match updatePlaylists state.Playlists { playlist with Items = newItems } with
+                match updatePlaylists state.Playlists newPlaylist with
                 | Ok playlists ->
                     let cmd =
                         match isCurrentTrack, previous, next with
@@ -676,16 +694,16 @@ let transition msg state (player: MediaPlayer) =
                             Cmd.batch
                                 [ Cmd.ofMsg RequestNoTrack
                                   writePlaylistCmd
-                                  Cmd.ofMsg (RequestTrack(next, playlist, isPlaying)) ]
+                                  Cmd.ofMsg (RequestTrack(next, newPlaylist, isPlaying)) ]
                         | true, Some previous, _ ->
                             Cmd.batch
                                 [ Cmd.ofMsg RequestNoTrack
                                   writePlaylistCmd
-                                  Cmd.ofMsg (RequestTrack(previous, playlist, isPlaying)) ]
+                                  Cmd.ofMsg (RequestTrack(previous, newPlaylist, isPlaying)) ]
                         | true, None, None -> Cmd.batch [ Cmd.ofMsg RequestNoTrack; writePlaylistCmd ]
-                        | _ -> writePlaylistCmd
+                        | _ -> Cmd.batch [ Cmd.ofMsg (UpdatePreviousAndNext newPlaylist); writePlaylistCmd ]
 
-                    { state with Playlists = playlists }, cmd, []
+                    { state with Playlists = playlists }, cmd, [ NotifyTracksAddedOrRemoved newPlaylist ]
                 | Error error -> notifyError $"{nameof (OnRemoveTrack)} ({trackId}): {error}" None
             | Error error -> notifyError $"{nameof (OnRemoveTrack)} ({trackId}): {error}" None
         | Error error -> notifyError $"{nameof (OnRemoveTrack)} ({trackId}): {error}" None
