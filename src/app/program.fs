@@ -78,29 +78,40 @@ type App() =
             let writeDefaultPreferences defaultPreferences =
                 match writePreferences defaultPreferences |> Async.RunSynchronously with
                 | Ok _ -> []
-                | Error error -> [ $"Program.writeDefaultPreferences -> {error}" ]
+                | Error error -> [ makeError error (Some "Unable to write default preferences") ]
 
             let preferences, startupErrors =
                 match readPreferences () |> Async.RunSynchronously with
                 | Ok preferences -> preferences, []
                 | Error FileNotFound -> defaultPreferences, writeDefaultPreferences defaultPreferences
-                | Error (Other error) -> defaultPreferences, writeDefaultPreferences defaultPreferences @ [ error ]
+                | Error (Other error) ->
+                    defaultPreferences,
+                    writeDefaultPreferences defaultPreferences
+                    @ [ makeError error (Some "Unable to read preferences") ]
 
             let writeDefaultSession defaultSession =
                 match writeSession defaultSession |> Async.RunSynchronously with
                 | Ok _ -> []
-                | Error error -> [ $"Program.writeDefaultSession -> {error}" ]
+                | Error error -> [ makeError error (Some "Unable to write default session") ]
 
             let defaultSession = newSession ()
 
             let session, startupErrors =
                 match preferences.LastSessionId with
                 | Some sessionId ->
+                    let (SessionId guid) = sessionId
+                    let unableToRead = Some $"Unable to read last session ({guid})"
+
                     match readSession sessionId |> Async.RunSynchronously with
                     | Ok session -> session, startupErrors
-                    | Error FileNotFound -> defaultSession, writeDefaultSession defaultSession @ startupErrors
+                    | Error FileNotFound ->
+                        defaultSession,
+                        writeDefaultSession defaultSession
+                        @ [ makeError $"File not found for {sessionId}" unableToRead ] @ startupErrors
                     | Error (Other error) ->
-                        defaultSession, writeDefaultSession defaultSession @ [ error ] @ startupErrors
+                        defaultSession,
+                        writeDefaultSession defaultSession
+                        @ [ makeError error unableToRead ] @ startupErrors
                 | None -> defaultSession, startupErrors
 
             let sessionIds =

@@ -54,8 +54,8 @@ type State =
       SessionSummaries: SessionSummary list
       PlaylistSummaries: PlaylistSummary list
       AutoPlaySession: bool
-      ShowingErrors: bool
-      Errors: (ErrorId * DateTime * string) list
+      ShowingDebugOnlyErrors: bool
+      Errors: (ErrorId * DateTime * string * string option) list
       LastNormalSize: float * float
       LastNormalLocation: int * int
       LastWindowState: WindowState
@@ -80,6 +80,9 @@ let writeSession session =
 
 let deleteSession sessionId =
     async { return! delete Session (sessionFile sessionId) }
+
+let makeError error nonDebugMessage =
+    ErrorId.Create(), DateTime.UtcNow, error, nonDebugMessage
 
 let applicationIcon variant muted =
     let muted = if muted then $"-{ICON_VARIANT_MUTED}" else ""

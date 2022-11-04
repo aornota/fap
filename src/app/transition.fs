@@ -3,7 +3,7 @@ module Aornota.Fap.App.Transition
 open Aornota.Fap
 open Aornota.Fap.App.Model
 open Aornota.Fap.App.Preferences
-open Aornota.Fap.Dialogs
+open Aornota.Fap.Literals
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Avalonia.Controls
@@ -12,6 +12,7 @@ open Avalonia.FuncUI.Hosts
 open Elmish
 open LibVLCSharp.Shared
 open System
+open System.Collections.Generic
 open System.IO
 
 type Msg =
@@ -34,7 +35,7 @@ type Msg =
     | FilesAdded of string array
     | FolderAdded of string
     | PlaylistDeleted of Playlists.Model.PlaylistId
-    | AddError of string
+    | AddError of string * string option
     | UpdateSessionSummary
     | WriteSession
     | DebounceWriteSessionRequest of WriteSessionRequestId
@@ -51,9 +52,9 @@ type Msg =
     | OnAddFiles
     | OnAddFolder
     | OnDeletePlaylist of Playlists.Model.PlaylistId
-    | OnToggleShowingErrors
+    | OnToggleShowingDebugOnlyErrors
     | OnClearAllErrors
-    | OnClearError of ErrorId
+    | OnDismissError of ErrorId
     // From Playlists
     | PlaylistsMsg of Playlists.Transition.Msg
     // From HostWindow subscriptions
@@ -65,9 +66,6 @@ type Msg =
     | PlayerPositionChanged of float32
     | PlayerEnded
 
-let private makeError error =
-    ErrorId.Create(), DateTime.UtcNow, error
-
 let private sessionSummary (session: Session) =
     { SessionId = session.Id
       Name = session.Name
@@ -78,12 +76,19 @@ let private playlistSummary (playlist: Playlists.Model.Playlist) =
       Name = playlist.Name
       TrackCount = Playlists.Model.tracks playlist |> List.length }
 
-let private errorOrNoOp =
+let private errorOrNoOp nonDebugMessage =
     function
     | Ok _ -> NoOp
-    | Error error -> AddError error
+    | Error error -> AddError(error, nonDebugMessage)
 
-let init preferences session sessionIds playlistIds (startupErrors: string list) (player: MediaPlayer) =
+let init
+    preferences
+    session
+    sessionIds
+    playlistIds
+    (startupErrors: (ErrorId * DateTime * string * string option) list)
+    (player: MediaPlayer)
+    =
     let playlistsState, playlistsMsgs =
         Playlists.Transition.init
             session.PlaylistIds
@@ -102,8 +107,8 @@ let init preferences session sessionIds playlistIds (startupErrors: string list)
       SessionSummaries = sessionSummaries
       PlaylistSummaries = []
       AutoPlaySession = preferences.AutoPlaySession
-      ShowingErrors = isDebug && startupErrors.Length > 0
-      Errors = startupErrors |> List.map makeError
+      ShowingDebugOnlyErrors = isDebug && startupErrors.Length > 0
+      Errors = startupErrors
       LastNormalSize = preferences.NormalSize
       LastNormalLocation = preferences.NormalLocation
       LastWindowState = preferences.WindowState
@@ -134,12 +139,17 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
 
             state, Cmd.OfAsync.perform read () handleResult
         | [] -> { state with SessionSummaries = summaries }, Cmd.none
-    | ReadSessionError (readError, SessionId guid, sessionIds, summaries) ->
+    | ReadSessionError (readError, sessionId, sessionIds, summaries) ->
+        let (SessionId guid) = sessionId
+
         state,
         Cmd.batch
             [ Cmd.ofMsg (ReadSessions(sessionIds, summaries))
               Cmd.ofMsg (
-                  AddError $"App.transition -> Unable to read {nameof (Session)} ({guid}): {readErrorText readError}"
+                  AddError(
+                      $"{nameof (ReadSessionError)} ({sessionId}): {readErrorText readError}",
+                      Some $"Unable to read session ({guid})"
+                  )
               ) ]
     | ReadPlaylists (playlistIds, summaries) ->
         match playlistIds with
@@ -154,12 +164,17 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
 
             state, Cmd.OfAsync.perform read () handleResult
         | [] -> { state with PlaylistSummaries = summaries }, Cmd.none
-    | ReadPlaylistError (readError, Playlists.Model.PlaylistId guid, playlistIds, summaries) ->
+    | ReadPlaylistError (readError, playlistId, playlistIds, summaries) ->
+        let (Playlists.Model.PlaylistId guid) = playlistId
+
         state,
         Cmd.batch
             [ Cmd.ofMsg (ReadPlaylists(playlistIds, summaries))
               Cmd.ofMsg (
-                  AddError $"App.transition -> Unable to read {nameof (Playlist)} ({guid}): {readErrorText readError}"
+                  AddError(
+                      $"{nameof (ReadPlaylistError)} ({playlistId}): {readErrorText readError}",
+                      Some $"Unable to read playilst ({guid})"
+                  )
               ) ]
     | UpdateTitle ->
         let trackAndPlaylist, cmd =
@@ -167,7 +182,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             | Some trackState ->
                 match Playlists.Model.findTrack state.PlaylistsState.Playlists trackState.Track.Id with
                 | Ok (playlist, trackData) -> $"{trackData.Name} | {playlist.Name} | ", Cmd.none
-                | Error error -> "", Cmd.ofMsg (AddError error)
+                | Error error -> "", Cmd.ofMsg (AddError(error, None))
             | None -> "", Cmd.none
 
         window.Title <- $"{trackAndPlaylist}{state.Session.Name} - {applicationNameAndVersion}"
@@ -206,17 +221,14 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 |> List.filter (fun summary -> summary.SessionId <> sessionId)
 
             { state with SessionSummaries = newSessionSummaries }, Cmd.none
-        | None -> state, Cmd.ofMsg (AddError $"App.transition -> {nameof (Session)} ({sessionId} not in summaries")
+        | None -> state, Cmd.ofMsg (AddError($"{nameof (SessionDeleted)}: ({sessionId}) not in summaries", None))
     | NewPlaylistAdded playlist ->
         match
             state.PlaylistSummaries
             |> List.tryFind (fun summary -> summary.PlaylistId = playlist.Id)
         with
         | Some _ ->
-            state,
-            Cmd.ofMsg (
-                AddError $"App.transition -> {nameof (Playlists.Model.Playlist)} ({playlist.Id} already in summaries"
-            )
+            state, Cmd.ofMsg (AddError($"{nameof (NewPlaylistAdded)}: ({playlist.Id}) already in summaries", None))
         | None ->
             { state with PlaylistSummaries = playlistSummary playlist :: state.PlaylistSummaries },
             Cmd.ofMsg UpdateSessionSummary
@@ -250,21 +262,31 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             Cmd.batch
                 [ Cmd.ofMsg (WritePreferences App)
                   Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.NotifyFolderAdded folder)) ]
-    | PlaylistDeleted playilstId ->
+    | PlaylistDeleted playlistId ->
         match
             state.PlaylistSummaries
-            |> List.tryFind (fun summary -> summary.PlaylistId = playilstId)
+            |> List.tryFind (fun summary -> summary.PlaylistId = playlistId)
         with
         | Some _ ->
             let newPlaylistSummaries =
                 state.PlaylistSummaries
-                |> List.filter (fun summary -> summary.PlaylistId <> playilstId)
+                |> List.filter (fun summary -> summary.PlaylistId <> playlistId)
 
             { state with PlaylistSummaries = newPlaylistSummaries }, Cmd.none
-        | None ->
-            state,
-            Cmd.ofMsg (AddError $"App.transition -> {nameof (Playlists.Model.Playlist)} ({playilstId} not in summaries")
-    | AddError error -> { state with Errors = makeError error :: state.Errors }, Cmd.none
+        | None -> state, Cmd.ofMsg (AddError($"{nameof (PlaylistDeleted)}: ({playlistId}) not in summaries", None))
+    | AddError (error, nonDebugMessage) ->
+        let maxErrors = 100
+
+        let newError = makeError error nonDebugMessage
+
+        let newErrors =
+            newError
+            :: (if state.Errors.Length > (maxErrors - 1) then
+                    state.Errors |> List.take (maxErrors - 1)
+                else
+                    state.Errors)
+
+        { state with Errors = newErrors }, Cmd.none
     | UpdateSessionSummary ->
         let newSessionSummary =
             { SessionId = state.Session.Id
@@ -287,7 +309,9 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             { state with SessionSummaries = newSessionSummaries }, Cmd.ofMsg WriteSession
         | None ->
             state,
-            Cmd.ofMsg (AddError $"App.transition -> {nameof (Session)} ({newSessionSummary.SessionId} not in summaries")
+            Cmd.ofMsg (
+                AddError($"{nameof (UpdateSessionSummary)}: ({newSessionSummary.SessionId}) not in summaries", None)
+            )
     | WriteSession ->
         let writeSessionRequestId = WriteSessionRequestId.Create()
 
@@ -327,10 +351,12 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                         PlaylistIds = newPlaylistIds
                         LastTrackId = newLastTrackId }
 
+                let (SessionId guid) = state.Session.Id
+
                 { state with
                     Session = newSession
                     WriteSessionRequests = newWriteSessionRequests },
-                Cmd.OfAsync.perform writeSession newSession errorOrNoOp
+                Cmd.OfAsync.perform writeSession newSession (errorOrNoOp (Some $"Unable to write sessions ({guid})"))
             else
                 { state with WriteSessionRequests = newWriteSessionRequests }, Cmd.none
     | WritePreferences source ->
@@ -393,7 +419,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                     LastNormalLocation = preferences.NormalLocation
                     LastWindowState = preferences.WindowState
                     WritePreferencesRequests = newWritePreferencesRequests },
-                Cmd.OfAsync.perform writePreferences preferences errorOrNoOp
+                Cmd.OfAsync.perform writePreferences preferences (errorOrNoOp (Some "Unable to write preferences"))
             else
                 { state with WritePreferencesRequests = newWritePreferencesRequests }, Cmd.none
     // UI
@@ -427,7 +453,11 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             | Ok session -> SessionOpened session
             | Error readError ->
                 let (SessionId guid) = sessionId
-                AddError $"App.transition -> Unable to read {nameof (Session)} ({guid}): {readErrorText readError}"
+
+                AddError(
+                    $"{nameof (OnOpenSession)} ({sessionId}): {readErrorText readError}",
+                    Some $"Unable to open session ({guid})"
+                )
 
         state, Cmd.OfAsync.perform read () handleResult
     | OnDeleteSession sessionId ->
@@ -439,7 +469,11 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             | Ok () -> SessionDeleted sessionId
             | Error error ->
                 let (SessionId guid) = sessionId
-                AddError $"App.transition -> Unable to delete {nameof (Session)} ({guid}): {error}"
+
+                AddError(
+                    $"{nameof (OnDeleteSession)} ({sessionId}): {error}",
+                    Some $"Unable to delete session ({guid})"
+                )
 
         state, Cmd.OfAsync.perform delete () handleResult
     | OnToggleAutoPlaySession ->
@@ -461,19 +495,33 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             | Error readError ->
                 let (Playlists.Model.PlaylistId guid) = playlistId
 
-                AddError
-                    $"App.transition -> Unable to read {nameof (Playlists.Model.Playlist)} ({guid}): {readErrorText readError}"
+                AddError(
+                    $"{nameof (OnOpenPlaylist)} ({playlistId}): {readErrorText readError}",
+                    Some $"Unable to open playlist ({guid})"
+                )
 
         state, Cmd.OfAsync.perform read () handleResult
     | OnAddFiles ->
-        let dialog = filesDialog state.LastAudioFolder
+        let filter = FileDialogFilter()
+
+        filter.Extensions <- List(fileExtensions)
+        filter.Name <- "Audio files"
+
+        let dialog = OpenFileDialog()
+
+        dialog.Directory <- state.LastAudioFolder
+        dialog.Title <- ADD_FILES
+        dialog.AllowMultiple <- true
+        dialog.Filters <- List(seq { filter })
 
         let showDialog () =
             dialog.ShowAsync(window) |> Async.AwaitTask
 
         state, Cmd.OfAsync.perform showDialog () FilesAdded
     | OnAddFolder ->
-        let dialog = folderDialog state.LastAudioFolder
+        let dialog = OpenFolderDialog()
+        dialog.Directory <- state.LastAudioFolder
+        dialog.Title <- ADD_FOLDER
 
         let showDialog () =
             dialog.ShowAsync(window) |> Async.AwaitTask
@@ -488,16 +536,21 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             | Ok () -> PlaylistDeleted playlistId
             | Error error ->
                 let (Playlists.Model.PlaylistId guid) = playlistId
-                AddError $"App.transition -> Unable to delete {nameof (Playlists.Model.Playlist)} ({guid}): {error}"
+
+                AddError(
+                    $"{nameof (OnDeletePlaylist)} ({playlistId}): {error}",
+                    Some $"Unable to delete playlist ({guid})"
+                )
 
         state, Cmd.OfAsync.perform delete () handleResult
-    | OnToggleShowingErrors -> { state with ShowingErrors = not state.ShowingErrors }, Cmd.none
+    | OnToggleShowingDebugOnlyErrors ->
+        { state with ShowingDebugOnlyErrors = not state.ShowingDebugOnlyErrors }, Cmd.none
     | OnClearAllErrors -> { state with Errors = [] }, Cmd.none
-    | OnClearError errorId ->
+    | OnDismissError errorId ->
         { state with
             Errors =
                 state.Errors
-                |> List.filter (fun (otherErrorId, _, _) -> otherErrorId <> errorId) },
+                |> List.filter (fun (otherErrorId, _, _, _) -> otherErrorId <> errorId) },
         Cmd.none
     // From Playlists
     | PlaylistsMsg playlistsMsg ->
@@ -510,7 +563,8 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             | Playlists.Transition.ExternalMsg.NotifyMutedToggled ->
                 Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg (WritePreferences Player) ]
             | Playlists.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
-            | Playlists.Transition.ExternalMsg.NotifyError error -> Cmd.ofMsg (AddError error)
+            | Playlists.Transition.ExternalMsg.NotifyError (error, nonDebugMessage) ->
+                Cmd.ofMsg (AddError(error, nonDebugMessage))
 
         let newPlaylistState, cmd, externalMsgs =
             Playlists.Transition.transition playlistsMsg state.PlaylistsState player
