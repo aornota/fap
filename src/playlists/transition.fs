@@ -869,7 +869,9 @@ let transition msg state (player: MediaPlayer) =
 
         let newPlaylists = newPlaylist :: (state.Playlists |> List.rev) |> List.rev
 
-        { state with Playlists = newPlaylists },
+        { state with
+            Playlists = newPlaylists
+            SelectedPlaylistId = Some newPlaylist.Id },
         Cmd.ofMsg (WritePlaylist newPlaylist.Id),
         [ NotifyNewPlaylistAdded newPlaylist ]
     | NotifyPlaylistOpened playlist ->
@@ -935,16 +937,16 @@ let transition msg state (player: MediaPlayer) =
                 | _ -> trackState, []
 
             if trackState.Track.Duration <> Some duration then
-                match findTrack state.Playlists trackState.Track.Id with
-                | Ok (playlist, trackData) ->
+                match findTrack state.Playlists newTrackState.Track.Id with
+                | Ok (playlist, _) ->
                     let mutable updated = 0
 
                     let newItems =
                         playlist.Items
                         |> List.map (fun item ->
-                            if isTrackId trackData.Id item then
+                            if isTrackId newTrackState.Track.Id item then
                                 updated <- updated + 1
-                                Track trackData
+                                Track newTrackState.Track
                             else
                                 item)
 
@@ -961,10 +963,10 @@ let transition msg state (player: MediaPlayer) =
                         | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
                     else if updated = 0 then
                         notifyError
-                            $"{nameof (NotifyPlaying)}: no matches for {trackData.Id} for {nameof (Playlist)} {playlist.Name}"
+                            $"{nameof (NotifyPlaying)}: no matches for {newTrackState.Track.Id} for {nameof (Playlist)} {playlist.Name}"
                     else
                         notifyError
-                            $"{nameof (NotifyPlaying)}: multiple matches for {trackData.Id} for {nameof (Playlist)} {playlist.Name}"
+                            $"{nameof (NotifyPlaying)}: multiple matches for {newTrackState.Track.Id} for {nameof (Playlist)} {playlist.Name}"
                 | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}"
             else
                 { state with TrackState = Some newTrackState }, Cmd.none, externalMsgs
