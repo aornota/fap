@@ -13,16 +13,9 @@ open Avalonia.Layout
 open Avalonia.Media
 open System
 
-[<Literal>]
-let private MENU_ITEM_SEPARATOR = "-"
-
-[<Literal>]
-let private NO_ERRORS = "- no errors -"
-
-[<Literal>]
-let private TIMESTAMP_FORMAT = "yyyy-MM-dd 'at' HH:mm:ss.fff"
-
 let private menu state dispatch =
+    let separator = "-"
+
     let sessionMenu =
         let canChangeOrDeleteSession =
             match state.WriteSessionRequests, state.WritePreferencesRequests with
@@ -92,16 +85,16 @@ let private menu state dispatch =
                           MenuItem.fontSize 12.
                           MenuItem.isEnabled (canChangeOrDeleteSession && enabledCount > 0)
                           MenuItem.viewItems openSessionItems ]
-                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
+                    MenuItem.create [ MenuItem.header separator ]
                     MenuItem.create
                         [ MenuItem.header "Delete"
                           MenuItem.fontSize 12.
                           MenuItem.foreground COLOUR_DELETE
                           MenuItem.isEnabled (canChangeOrDeleteSession && enabledCount > 0)
                           MenuItem.viewItems deleteSessionItems ]
-                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
+                    MenuItem.create [ MenuItem.header separator ]
                     settingsMenu
-                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
+                    MenuItem.create [ MenuItem.header separator ]
                     MenuItem.create
                         [ MenuItem.header "Exit"
                           MenuItem.fontSize 12.
@@ -150,6 +143,8 @@ let private menu state dispatch =
 
         let deletePlaylistItems = sortedSummaries |> List.map (playlistItem true)
 
+        let addEnabled = state.PlaylistsState.SelectedPlaylistId |> Option.isSome
+
         MenuItem.create
             [ MenuItem.header "Playlist"
               MenuItem.fontSize 12.
@@ -163,10 +158,18 @@ let private menu state dispatch =
                           MenuItem.fontSize 12.
                           MenuItem.isEnabled (enabledCount > 0)
                           MenuItem.viewItems openPlaylistItems ]
-                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
-                    MenuItem.create [ MenuItem.header "Add files"; MenuItem.fontSize 12.; MenuItem.onClick ignore ]
-                    MenuItem.create [ MenuItem.header "Add folder"; MenuItem.fontSize 12.; MenuItem.onClick ignore ]
-                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
+                    MenuItem.create [ MenuItem.header separator ]
+                    MenuItem.create
+                        [ MenuItem.header ADD_FILES
+                          MenuItem.fontSize 12.
+                          MenuItem.isEnabled addEnabled
+                          MenuItem.onClick (fun _ -> dispatch OnAddFiles) ]
+                    MenuItem.create
+                        [ MenuItem.header ADD_FOLDER
+                          MenuItem.fontSize 12.
+                          MenuItem.isEnabled addEnabled
+                          MenuItem.onClick (fun _ -> dispatch OnAddFolder) ]
+                    MenuItem.create [ MenuItem.header separator ]
                     MenuItem.create
                         [ MenuItem.header "Delete"
                           MenuItem.fontSize 12.
@@ -196,8 +199,8 @@ let private menu state dispatch =
         [ Menu.dock Dock.Top
           Menu.viewItems
               [ sessionMenu
+                playlistMenu
                 if isDebug then
-                    playlistMenu
                     errorsMenu ] ]
 
 let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
@@ -213,7 +216,7 @@ let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
                           TextBlock.textAlignment TextAlignment.Left
                           TextBlock.width 170.
                           TextBlock.fontSize 12.
-                          TextBlock.text (timestamp.ToString(TIMESTAMP_FORMAT)) ]
+                          TextBlock.text (timestamp.ToString("yyyy-MM-dd 'at' HH:mm:ss.fff")) ]
                     Button.create
                         [ Button.dock Dock.Right
                           Button.width SIZE_BUTTON_WITH_ICON
@@ -250,7 +253,7 @@ let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
               TextBlock.padding (10, 0, 0, 0)
               TextBlock.fontSize 12.
               TextBlock.foreground COLOUR_DISABLED_TEXT
-              TextBlock.text NO_ERRORS ]
+              TextBlock.text "- no errors -" ]
 
 let view state dispatch =
     let session =

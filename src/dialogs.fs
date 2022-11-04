@@ -1,33 +1,26 @@
 module Aornota.Fap.Dialogs
 
-(* open Aornota.Fap.Utilities
+open Aornota.Fap.Literals
+open Aornota.Fap.Utilities
 open Avalonia.Controls
 open System.Collections.Generic
 
-let filesDialog (filters: FileDialogFilter seq option) =
+let filesDialog folder =
+    let filter = FileDialogFilter()
+
+    filter.Extensions <- List(fileExtensions)
+    filter.Name <- "Audio files"
+
     let dialog = OpenFileDialog()
 
-    let filters =
-        match filters with
-        | Some filter -> filter
-        | None ->
-            let filter = FileDialogFilter()
-
-            filter.Extensions <- List(fileExtensions)
-
-            filter.Name <- "Audio files"
-            seq { filter }
-
+    dialog.Directory <- folder
+    dialog.Title <- ADD_FILES
     dialog.AllowMultiple <- true
-    // TODO-NMB: Make configurable?...
-    dialog.Directory <- "D:\\AUDIO"
-    dialog.Title <- "Select file/s"
-    dialog.Filters <- List(filters)
+    dialog.Filters <- List(seq { filter })
     dialog
 
-let folderDialog () =
+let folderDialog folder =
     let dialog = OpenFolderDialog()
-    // TODO-NMB: Make configurable?...
-    dialog.Directory <- "D:\\AUDIO"
-    dialog.Title <- "Select folder"
-    dialog *)
+    dialog.Directory <- folder
+    dialog.Title <- ADD_FOLDER
+    dialog

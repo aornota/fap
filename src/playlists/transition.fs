@@ -41,9 +41,10 @@ type Msg =
     | DebounceWritePlaylistRequest of WritePlaylistRequestId * PlaylistId
     | WritePlaylistError of string * PlaylistId
     | DebounceSeekRequest of SeekRequestId * float32
-    | RequestDefaultTrack of Playlist option * play: bool
-    | RequestTrack of trackData: TrackData * Playlist * play: bool
+    | RequestDefaultTrack of Playlist option * bool
+    | RequestTrack of TrackData * Playlist * bool
     | RequestNoTrack
+    | AddToPlaylist of TrackData list
     // UI
     | OnSelectPlaylist of PlaylistId
     | OnMovePlaylist of PlaylistId * HorizontalDirection
@@ -64,6 +65,8 @@ type Msg =
     // From App
     | NotifyNewPlaylistRequested
     | NotifyPlaylistOpened of Playlist
+    | NotifyFilesAdded of string list
+    | NotifyFolderAdded of string
     // From MediaPlayer subscriptions
     | NotifyErrored
     | NotifyPlaying
@@ -71,13 +74,7 @@ type Msg =
     | NotifyEnded
 
 [<Literal>]
-let private NEW_PLAYLIST = "new playlist"
-
-[<Literal>]
-let private DEBOUNCE_WRITE_PLAYLIST_REQUEST_DELAY = 250
-
-[<Literal>]
-let private DEBOUNCE_SEEK_REQUEST_DELAY = 250
+let START_POSITION = 0f
 
 let private previousAndNext playlist trackId =
     let tracks = tracks playlist
@@ -132,10 +129,6 @@ let init playlistIds lastTrackId muted volume autoPlay (player: MediaPlayer) =
       SeekRequests = [] },
     [ RequestNoTrack; ReadPlaylists(playlistIds, lastTrackId, autoPlay, []) ]
 
-(* Notes:
-    -- If change TrackState.Track (including setting TrackState to None) or TrackState.PlayerStatus, call (external) NotifyTrackStateChanged.
-    -- If add / remove / reorder Items for Playlist, call (internal) WritePlaylist. *)
-
 let transition msg state (player: MediaPlayer) =
     let notifyError error =
         state, Cmd.none, [ NotifyError $"Playlists.transition -> {error}" ]
@@ -188,7 +181,7 @@ let transition msg state (player: MediaPlayer) =
 
         let delay () =
             async {
-                do! Async.Sleep DEBOUNCE_WRITE_PLAYLIST_REQUEST_DELAY
+                do! Async.Sleep 500
                 return writePlaylistRequest
             }
 
@@ -226,6 +219,27 @@ let transition msg state (player: MediaPlayer) =
             Cmd.OfAsync.perform writePlaylist playlistId handleResult,
             []
     | WritePlaylistError (error, PlaylistId guid) -> notifyError $"Unable to write playlist ({guid}): {error}"
+    | DebounceSeekRequest (seekRequestId, position) ->
+        match state.TrackState with
+        | Some trackState ->
+            match trackState.PlayerState with
+            | Playing _ ->
+                let newSeekRequests =
+                    state.SeekRequests
+                    |> List.filter (fun otherSeekRequestId -> otherSeekRequestId <> seekRequestId)
+
+                match newSeekRequests with
+                | _ :: _ -> { state with SeekRequests = newSeekRequests }, Cmd.none, []
+                | [] ->
+                    player.Position <- position
+
+                    { state with
+                        TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
+                        SeekRequests = newSeekRequests },
+                    Cmd.none,
+                    []
+            | _ -> notifyError $"{nameof (DebounceSeekRequest)} when {nameof (PlayerState)} not {nameof (Playing)}"
+        | None -> notifyError $"{nameof (DebounceSeekRequest)} when trackState is {nameof (None)}"
     | RequestDefaultTrack (playlist, play) ->
         let playlist =
             match playlist with
@@ -306,27 +320,40 @@ let transition msg state (player: MediaPlayer) =
             SeekRequests = [] },
         Cmd.none,
         [ NotifyTrackStateChanged ]
-    | DebounceSeekRequest (seekRequestId, position) ->
-        match state.TrackState with
-        | Some trackState ->
-            match trackState.PlayerState with
-            | Playing _ ->
-                let newSeekRequests =
-                    state.SeekRequests
-                    |> List.filter (fun otherSeekRequestId -> otherSeekRequestId <> seekRequestId)
+    | AddToPlaylist trackDatas ->
+        match state.SelectedPlaylistId with
+        | Some playlistId ->
+            match state.Playlists |> List.tryFind (fun playlist -> playlist.Id = playlistId) with
+            | Some playlist ->
+                let trackDatas = trackDatas |> List.sortBy (fun trackData -> trackData.Name)
 
-                match newSeekRequests with
-                | _ :: _ -> { state with SeekRequests = newSeekRequests }, Cmd.none, []
-                | [] ->
-                    player.Position <- position
+                match trackDatas with
+                | trackData :: _ ->
+                    let requestTrack =
+                        if state.Playlists.Length = 1 && tracks playlist |> List.length = 0 then
+                            Some trackData
+                        else
+                            None
 
-                    { state with
-                        TrackState = Some { trackState with PlayerState = Playing(position, Some position) }
-                        SeekRequests = newSeekRequests },
-                    Cmd.none,
-                    []
-            | _ -> notifyError $"{nameof (DebounceSeekRequest)} when {nameof (PlayerState)} not {nameof (Playing)}"
-        | None -> notifyError $"{nameof (DebounceSeekRequest)} when trackState is {nameof (None)}"
+                    let items = SubTotal(SubTotalId.Create()) :: (trackDatas |> List.map Track)
+
+                    let newPlaylist = { playlist with Items = (playlist.Items @ items) |> sanitize }
+
+                    let writePlaylistCmd = Cmd.ofMsg (WritePlaylist playlist.Id)
+
+                    match updatePlaylists state.Playlists newPlaylist with
+                    | Ok playlists ->
+                        let cmd =
+                            match requestTrack with
+                            | Some trackData ->
+                                Cmd.batch [ writePlaylistCmd; Cmd.ofMsg (RequestTrack(trackData, newPlaylist, false)) ]
+                            | None -> writePlaylistCmd
+
+                        { state with Playlists = playlists }, cmd, []
+                    | Error error -> notifyError $"{nameof (AddToPlaylist)}: {error}"
+                | [] -> notifyError $"{nameof (AddToPlaylist)}: no {nameof (Track)}s to add"
+            | None -> notifyError $"{nameof (AddToPlaylist)}: {nameof (Playlist)} ({playlistId}) not found"
+        | None -> notifyError $"{nameof (AddToPlaylist)} when no selected playlist"
     // From UI
     | OnSelectPlaylist playlistId -> { state with SelectedPlaylistId = Some playlistId }, Cmd.none, []
     | OnMovePlaylist (playlistId, horizontalDirection) ->
@@ -704,7 +731,7 @@ let transition msg state (player: MediaPlayer) =
 
                     let delay () =
                         async {
-                            do! Async.Sleep DEBOUNCE_SEEK_REQUEST_DELAY
+                            do! Async.Sleep 250
                             return seekRequest
                         }
 
@@ -837,7 +864,7 @@ let transition msg state (player: MediaPlayer) =
     | NotifyNewPlaylistRequested ->
         let newPlaylist =
             { Id = PlaylistId.Create()
-              Name = NEW_PLAYLIST
+              Name = "new playlist"
               Items = [] }
 
         let newPlaylists = newPlaylist :: (state.Playlists |> List.rev) |> List.rev
@@ -857,6 +884,31 @@ let transition msg state (player: MediaPlayer) =
             SelectedPlaylistId = Some playlist.Id },
         cmd,
         [ NotifyPlaylistsChanged ]
+    | NotifyFilesAdded files ->
+        let tracks =
+            files
+            |> List.map FileInfo
+            |> List.map (fun fi ->
+                { Id = TrackId.Create()
+                  Folder = fi.DirectoryName
+                  Name = fi.Name
+                  Duration = None })
+
+        state, Cmd.ofMsg (AddToPlaylist tracks), []
+    | NotifyFolderAdded folder ->
+        let dottedFileExtensions = fileExtensions |> List.map (fun ext -> $".{ext}")
+
+        let tracks =
+            (DirectoryInfo folder).GetFiles()
+            |> List.ofSeq
+            |> List.filter (fun fi -> dottedFileExtensions |> List.contains fi.Extension)
+            |> List.map (fun fi ->
+                { Id = TrackId.Create()
+                  Folder = fi.DirectoryName
+                  Name = fi.Name
+                  Duration = None })
+
+        state, Cmd.ofMsg (AddToPlaylist tracks), []
     // From MediaPlayer subscriptions
     | NotifyErrored ->
         match state.TrackState with

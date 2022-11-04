@@ -6,12 +6,13 @@ open Aornota.Fap.Persistence
 open Avalonia.Controls
 open System
 
-type Preferences = // TODO-NMB: LastAudioFolder?...
+type Preferences =
     { NormalSize: float * float
       NormalLocation: int * int
       WindowState: WindowState
       LastSessionId: SessionId option
       AutoPlaySession: bool
+      LastAudioFolder: string
       Muted: bool
       Volume: int }
 
@@ -24,6 +25,7 @@ let defaultPreferences =
       WindowState = WindowState.Normal
       LastSessionId = None
       AutoPlaySession = false
+      LastAudioFolder = myMusicFolder
       Muted = false
       Volume = 100 }
 

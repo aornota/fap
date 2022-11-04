@@ -10,7 +10,7 @@
     <Compile Include="literals.fs" />
     <Compile Include="persistence.fs" />
     <Compile Include="utilities.fs" />
-    <!-- TODO-NMB: Reinstate as needed...<Compile Include="dialogs.fs" /> -->
+    <Compile Include="dialogs.fs" />
     <Compile Include="extensions.fs" />
     <Compile Include="icons.fs" />
     <Compile Include="playlists\model.fs" />

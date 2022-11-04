@@ -4,7 +4,6 @@ open Aornota.Fap.Literals
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open System
-(* open System.IO *)
 
 type TrackId =
     | TrackId of Guid
@@ -69,9 +68,6 @@ type State =
       TrackState: TrackState option
       WritePlaylistRequests: (WritePlaylistRequestId * PlaylistId) list
       SeekRequests: SeekRequestId list }
-
-[<Literal>]
-let START_POSITION = 0f
 
 let private playlistFile (PlaylistId guid) = $"{guid}.{fileExtension Playlist}"
 
@@ -140,27 +136,3 @@ let iconVariant trackState =
         | Playing _ -> ICON_VARIANT_ACTIVE
         | PlaybackErrored -> ICON_VARIANT_ACTIVE
     | None -> ICON_VARIANT_DISABLED
-
-(*let tracksFromFiles files =
-    files
-    |> List.map FileInfo
-    |> List.map (fun fi ->
-        { Id = TrackId(Guid.NewGuid())
-          Folder = fi.DirectoryName
-          Name = fi.Name
-          Duration = None })
-
-let tracksFromFolder folder =
-    let dottedFileExtensions = fileExtensions |> List.map (fun ext -> $".{ext}")
-
-    match String.IsNullOrEmpty folder with
-    | true -> []
-    | false ->
-        (DirectoryInfo folder).GetFiles()
-        |> List.ofSeq
-        |> List.filter (fun fi -> dottedFileExtensions |> List.contains fi.Extension)
-        |> List.map (fun fi ->
-            { Id = TrackId(Guid.NewGuid())
-              Folder = fi.DirectoryName
-              Name = fi.Name
-              Duration = None }) *)

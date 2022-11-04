@@ -59,18 +59,16 @@ type State =
       LastNormalSize: float * float
       LastNormalLocation: int * int
       LastWindowState: WindowState
+      LastAudioFolder: string
       WriteSessionRequests: WriteSessionRequestId list
       WritePreferencesRequests: (WritePreferencesRequestId * WritePreferencesRequestSource) list
       PlaylistsState: Playlists.Model.State }
-
-[<Literal>]
-let private NEW_SESSION = "new session"
 
 let private sessionFile (SessionId guid) = $"{guid}.{fileExtension Session}"
 
 let newSession () =
     { Id = SessionId.Create()
-      Name = NEW_SESSION
+      Name = "new session"
       PlaylistIds = []
       LastTrackId = None }
 

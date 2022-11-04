@@ -3,6 +3,7 @@ module Aornota.Fap.App.Transition
 open Aornota.Fap
 open Aornota.Fap.App.Model
 open Aornota.Fap.App.Preferences
+open Aornota.Fap.Dialogs
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Avalonia.Controls
@@ -11,6 +12,7 @@ open Avalonia.FuncUI.Hosts
 open Elmish
 open LibVLCSharp.Shared
 open System
+open System.IO
 
 type Msg =
     // Internal
@@ -29,6 +31,8 @@ type Msg =
     | SessionDeleted of SessionId
     | NewPlaylistAdded of Playlists.Model.Playlist
     | PlaylistOpened of Playlists.Model.Playlist
+    | FilesAdded of string array
+    | FolderAdded of string
     | PlaylistDeleted of Playlists.Model.PlaylistId
     | AddError of string
     | UpdateSessionSummary
@@ -44,8 +48,8 @@ type Msg =
     | OnExit
     | OnNewPlaylist
     | OnOpenPlaylist of Playlists.Model.PlaylistId
-    // TODO-NMB...OnAddFiles
-    // TODO-NMB...OnAddFolder
+    | OnAddFiles
+    | OnAddFolder
     | OnDeletePlaylist of Playlists.Model.PlaylistId
     | OnToggleShowingErrors
     | OnClearAllErrors
@@ -61,17 +65,6 @@ type Msg =
     | PlayerPositionChanged of float32
     | PlayerEnded
 
-[<Literal>]
-let private DEBOUNCE_WRITE_SESSION_REQUEST_DELAY = 250
-
-[<Literal>]
-let private DEBOUNCE_WRITE_PREFERENCES_REQUEST_DELAY = 250
-
-let private shutdown () =
-    match Avalonia.Application.Current.ApplicationLifetime with
-    | :? IClassicDesktopStyleApplicationLifetime as desktopLifetime -> desktopLifetime.Shutdown 0
-    | _ -> ()
-
 let private makeError error =
     ErrorId.Create(), DateTime.UtcNow, error
 
@@ -85,21 +78,10 @@ let private playlistSummary (playlist: Playlists.Model.Playlist) =
       Name = playlist.Name
       TrackCount = Playlists.Model.tracks playlist |> List.length }
 
-let private handleResult =
+let private errorOrNoOp =
     function
     | Ok _ -> NoOp
     | Error error -> AddError error
-
-let private handlePlaylistsExternal externalMsg =
-    match externalMsg with
-    | Playlists.Transition.ExternalMsg.NotifyNewPlaylistAdded playlist -> Cmd.ofMsg (NewPlaylistAdded playlist)
-    | Playlists.Transition.ExternalMsg.NotifyPlaylistsChanged -> Cmd.ofMsg UpdateSessionSummary
-    | Playlists.Transition.ExternalMsg.NotifyTrackStateChanged ->
-        Cmd.batch [ Cmd.ofMsg UpdateTitle; Cmd.ofMsg UpdateIcon; Cmd.ofMsg WriteSession ]
-    | Playlists.Transition.ExternalMsg.NotifyMutedToggled ->
-        Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg (WritePreferences Player) ]
-    | Playlists.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
-    | Playlists.Transition.ExternalMsg.NotifyError error -> Cmd.ofMsg (AddError error)
 
 let init preferences session sessionIds playlistIds (startupErrors: string list) (player: MediaPlayer) =
     let playlistsState, playlistsMsgs =
@@ -125,6 +107,7 @@ let init preferences session sessionIds playlistIds (startupErrors: string list)
       LastNormalSize = preferences.NormalSize
       LastNormalLocation = preferences.NormalLocation
       LastWindowState = preferences.WindowState
+      LastAudioFolder = preferences.LastAudioFolder
       WriteSessionRequests = []
       WritePreferencesRequests = []
       PlaylistsState = playlistsState },
@@ -239,6 +222,34 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
             Cmd.ofMsg UpdateSessionSummary
     | PlaylistOpened playlist ->
         state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.NotifyPlaylistOpened playlist))
+    | FilesAdded files ->
+        match files with
+        | null -> noChange
+        | _ ->
+            let files = files |> List.ofArray
+
+            match files with
+            | file :: _ ->
+                let lastAudioFolder = FileInfo(file).Directory.FullName
+
+                { state with LastAudioFolder = lastAudioFolder },
+                Cmd.batch
+                    [ Cmd.ofMsg (WritePreferences App)
+                      Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.NotifyFilesAdded files)) ]
+            | [] -> noChange
+    | FolderAdded folder ->
+        match folder with
+        | null -> noChange
+        | _ ->
+            let lastAudioFolder =
+                match DirectoryInfo(folder).Parent with
+                | null -> folder
+                | parent -> parent.FullName
+
+            { state with LastAudioFolder = lastAudioFolder },
+            Cmd.batch
+                [ Cmd.ofMsg (WritePreferences App)
+                  Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.NotifyFolderAdded folder)) ]
     | PlaylistDeleted playilstId ->
         match
             state.PlaylistSummaries
@@ -282,7 +293,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
 
         let delay () =
             async {
-                do! Async.Sleep DEBOUNCE_WRITE_SESSION_REQUEST_DELAY
+                do! Async.Sleep 500
                 return writeSessionRequestId
             }
 
@@ -319,7 +330,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 { state with
                     Session = newSession
                     WriteSessionRequests = newWriteSessionRequests },
-                Cmd.OfAsync.perform writeSession newSession handleResult
+                Cmd.OfAsync.perform writeSession newSession errorOrNoOp
             else
                 { state with WriteSessionRequests = newWriteSessionRequests }, Cmd.none
     | WritePreferences source ->
@@ -327,7 +338,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
 
         let delay () =
             async {
-                do! Async.Sleep DEBOUNCE_WRITE_PREFERENCES_REQUEST_DELAY
+                do! Async.Sleep 500
                 return writePreferencesRequest
             }
 
@@ -373,6 +384,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                       WindowState = window.WindowState
                       LastSessionId = Some state.Session.Id
                       AutoPlaySession = state.AutoPlaySession
+                      LastAudioFolder = state.LastAudioFolder
                       Muted = state.PlaylistsState.Muted
                       Volume = state.PlaylistsState.Volume }
 
@@ -381,7 +393,7 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                     LastNormalLocation = preferences.NormalLocation
                     LastWindowState = preferences.WindowState
                     WritePreferencesRequests = newWritePreferencesRequests },
-                Cmd.OfAsync.perform writePreferences preferences handleResult
+                Cmd.OfAsync.perform writePreferences preferences errorOrNoOp
             else
                 { state with WritePreferencesRequests = newWritePreferencesRequests }, Cmd.none
     // UI
@@ -433,7 +445,10 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     | OnToggleAutoPlaySession ->
         { state with AutoPlaySession = not state.AutoPlaySession }, Cmd.ofMsg (WritePreferences App)
     | OnExit ->
-        shutdown ()
+        match Avalonia.Application.Current.ApplicationLifetime with
+        | :? IClassicDesktopStyleApplicationLifetime as desktopLifetime -> desktopLifetime.Shutdown 0
+        | _ -> ()
+
         noChange
     | OnNewPlaylist -> state, Cmd.map PlaylistsMsg (Cmd.ofMsg Playlists.Transition.Msg.NotifyNewPlaylistRequested)
     | OnOpenPlaylist playlistId ->
@@ -450,8 +465,20 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                     $"App.transition -> Unable to read {nameof (Playlists.Model.Playlist)} ({guid}): {readErrorText readError}"
 
         state, Cmd.OfAsync.perform read () handleResult
-    // TODO-NMB: OnAddFiles...
-    // TODO-NMB: OnAddFolder...
+    | OnAddFiles ->
+        let dialog = filesDialog state.LastAudioFolder
+
+        let showDialog () =
+            dialog.ShowAsync(window) |> Async.AwaitTask
+
+        state, Cmd.OfAsync.perform showDialog () FilesAdded
+    | OnAddFolder ->
+        let dialog = folderDialog state.LastAudioFolder
+
+        let showDialog () =
+            dialog.ShowAsync(window) |> Async.AwaitTask
+
+        state, Cmd.OfAsync.perform showDialog () FolderAdded
     | OnDeletePlaylist playlistId ->
         let delete () =
             async { return! Playlists.Model.deletePlaylist playlistId }
@@ -474,13 +501,22 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         Cmd.none
     // From Playlists
     | PlaylistsMsg playlistsMsg ->
+        let handleExternal externalMsg =
+            match externalMsg with
+            | Playlists.Transition.ExternalMsg.NotifyNewPlaylistAdded playlist -> Cmd.ofMsg (NewPlaylistAdded playlist)
+            | Playlists.Transition.ExternalMsg.NotifyPlaylistsChanged -> Cmd.ofMsg UpdateSessionSummary
+            | Playlists.Transition.ExternalMsg.NotifyTrackStateChanged ->
+                Cmd.batch [ Cmd.ofMsg UpdateTitle; Cmd.ofMsg UpdateIcon; Cmd.ofMsg WriteSession ]
+            | Playlists.Transition.ExternalMsg.NotifyMutedToggled ->
+                Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg (WritePreferences Player) ]
+            | Playlists.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
+            | Playlists.Transition.ExternalMsg.NotifyError error -> Cmd.ofMsg (AddError error)
+
         let newPlaylistState, cmd, externalMsgs =
             Playlists.Transition.transition playlistsMsg state.PlaylistsState player
 
         { state with PlaylistsState = newPlaylistState },
-        Cmd.batch
-            [ Cmd.map PlaylistsMsg cmd
-              yield! externalMsgs |> List.map handlePlaylistsExternal ]
+        Cmd.batch [ Cmd.map PlaylistsMsg cmd; yield! externalMsgs |> List.map handleExternal ]
     // From HostWindow subscriptions
     | LocationChanged -> state, Cmd.ofMsg (WritePreferences Host)
     | EffectiveViewportChanged -> state, Cmd.ofMsg (WritePreferences Host)
@@ -490,23 +526,3 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
     | PlayerPositionChanged position ->
         state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.NotifyPositionChanged position))
     | PlayerEnded -> state, Cmd.map PlaylistsMsg (Cmd.ofMsg Playlists.Transition.Msg.NotifyEnded)
-(* | OpenFiles ->
-        let dialog = Dialogs.getFilesDialog None
-
-        let showDialog window =
-            dialog.ShowAsync(window) |> Async.AwaitTask
-
-        state, Cmd.OfAsync.perform showDialog window AfterSelectFiles
-    | OpenFolder ->
-        let dialog = Dialogs.getFolderDialog ()
-
-        let showDialog window =
-            dialog.ShowAsync(window) |> Async.AwaitTask
-
-        state, Cmd.OfAsync.perform showDialog window AfterSelectFolder
-    | AfterSelectFolder path ->
-        let songs = populateFromDirectory path |> Array.toList
-        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs))
-    | AfterSelectFiles paths ->
-        let songs = populateSongs paths |> Array.toList
-        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.AddFiles songs)) *)

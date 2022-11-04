@@ -19,9 +19,10 @@ let private JSON_SPACE_COUNT = 4
 
 let private extraCoders = Extra.empty |> Extra.withInt64
 
+let myMusicFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic)
+
 let private persistenceRoot =
-    let folder =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), APPLICATION_NAME)
+    let folder = Path.Combine(myMusicFolder, APPLICATION_NAME)
 
     if not (Directory.Exists(folder)) then
         Directory.CreateDirectory(folder)

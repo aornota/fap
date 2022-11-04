@@ -37,15 +37,6 @@ type private ItemForView =
     | SubTotalForView of SubTotalForView
     | TotalForView of TotalForView
 
-[<Literal>]
-let private NO_PLAYLISTS = "- no playlists -"
-
-[<Literal>]
-let private NO_TRACKS = "- no tracks -"
-
-[<Literal>]
-let private NO_SELECTED_TRACK = "- no track selected -"
-
 let private colour playerState =
     match playerState with
     | NoMedia
@@ -464,7 +455,7 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
                   TextBlock.padding (0, 10, 0, 0)
                   TextBlock.fontSize 12.
                   TextBlock.foreground COLOUR_DISABLED_TEXT
-                  TextBlock.text NO_TRACKS ]
+                  TextBlock.text "- no tracks -" ]
 
     let controlsAndContent =
         DockPanel.create
@@ -510,7 +501,7 @@ let private playlistsView (playlists: Playlist list) selectedPlaylistId trackSta
               TextBlock.padding (10, 0, 0, 0)
               TextBlock.fontSize 12.
               TextBlock.foreground COLOUR_DISABLED_TEXT
-              TextBlock.text NO_PLAYLISTS ]
+              TextBlock.text "- no playlists -" ]
 
 let private progressBar trackState (colour: string) dispatch =
     let enabled, positionValue, duration =
@@ -572,7 +563,7 @@ let private trackDetails trackState (colour: string) =
     let details =
         match trackState with
         | Some trackState -> trackState.Track.Name
-        | None -> NO_SELECTED_TRACK
+        | None -> "- no track selected -"
 
     TextBlock.create
         [ TextBlock.horizontalAlignment HorizontalAlignment.Center

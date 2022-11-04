@@ -105,3 +105,11 @@ let WINDOW_MINIMUM_WIDTH = 800.
 [<Literal>]
 let WINDOW_MINIMUM_HEIGHT = 600.
 // #endregion
+
+// #region Miscellaneous
+[<Literal>]
+let ADD_FILES = "Add file/s"
+
+[<Literal>]
+let ADD_FOLDER = "Add folder"
+// #endregion
