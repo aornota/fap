@@ -24,12 +24,12 @@ let private TIMESTAMP_FORMAT = "yyyy-MM-dd 'at' HH:mm:ss.fff"
 
 let private menu state dispatch =
     let sessionMenu =
-        let canChangeSession =
+        let canChangeOrDeleteSession =
             match state.WriteSessionRequests, state.WritePreferencesRequests with
             | [], [] -> true
             | _ -> false
 
-        let sessionItem (summary: SessionSummary) =
+        let sessionItem forDelete (summary: SessionSummary) =
             let name =
                 let extra =
                     if isDebug then
@@ -40,17 +40,28 @@ let private menu state dispatch =
 
                 $"""{summary.Name} ({summary.PlaylistCount} {plural "playlist" summary.PlaylistCount}){extra}"""
 
+            let msg = if forDelete then OnDeleteSession else OnOpenSession
+
             MenuItem.create
                 [ MenuItem.header name
                   MenuItem.fontSize 12.
+                  if forDelete then
+                      MenuItem.foreground COLOUR_DELETE
                   MenuItem.isEnabled (summary.SessionId <> state.Session.Id)
-                  MenuItem.onClick ((fun _ -> dispatch (OnOpenSession summary.SessionId)), OnChangeOf summary.SessionId) ]
+                  MenuItem.onClick ((fun _ -> dispatch (msg summary.SessionId)), OnChangeOf summary.SessionId) ]
             :> IView
 
-        let sessionItems =
-            state.SessionSummaries
-            |> List.sortBy (fun summary -> summary.Name)
-            |> List.map sessionItem
+        let sortedSummaries =
+            state.SessionSummaries |> List.sortBy (fun summary -> summary.Name)
+
+        let enabledCount =
+            sortedSummaries
+            |> List.filter (fun summary -> summary.SessionId <> state.Session.Id)
+            |> List.length
+
+        let openSessionItems = sortedSummaries |> List.map (sessionItem false)
+
+        let deleteSessionItems = sortedSummaries |> List.map (sessionItem true)
 
         let settingsMenu =
             MenuItem.create
@@ -65,7 +76,7 @@ let private menu state dispatch =
                                       "Enable auto-play"
                               )
                               MenuItem.fontSize 12.
-                              MenuItem.onClick (fun _ -> dispatch ToggleAutoPlaySession) ] ] ]
+                              MenuItem.onClick (fun _ -> dispatch OnToggleAutoPlaySession) ] ] ]
 
         MenuItem.create
             [ MenuItem.header "Session"
@@ -74,13 +85,20 @@ let private menu state dispatch =
                   [ MenuItem.create
                         [ MenuItem.header "New"
                           MenuItem.fontSize 12.
-                          MenuItem.isEnabled canChangeSession
+                          MenuItem.isEnabled canChangeOrDeleteSession
                           MenuItem.onClick (fun _ -> dispatch OnNewSession) ]
                     MenuItem.create
                         [ MenuItem.header "Open"
                           MenuItem.fontSize 12.
-                          MenuItem.isEnabled (canChangeSession && sessionItems.Length > 1)
-                          MenuItem.viewItems sessionItems ]
+                          MenuItem.isEnabled (canChangeOrDeleteSession && enabledCount > 0)
+                          MenuItem.viewItems openSessionItems ]
+                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
+                    MenuItem.create
+                        [ MenuItem.header "Delete"
+                          MenuItem.fontSize 12.
+                          MenuItem.foreground COLOUR_DELETE
+                          MenuItem.isEnabled (canChangeOrDeleteSession && enabledCount > 0)
+                          MenuItem.viewItems deleteSessionItems ]
                     MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
                     settingsMenu
                     MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
@@ -89,9 +107,8 @@ let private menu state dispatch =
                           MenuItem.fontSize 12.
                           MenuItem.onClick (fun _ -> dispatch OnExit) ] ] ]
 
-    // TODO-NMB: Implement this propertly...
     let playlistMenu =
-        let playlistItem (summary: PlaylistSummary) =
+        let playlistItem forDelete (summary: PlaylistSummary) =
             let name =
                 let extra =
                     if isDebug then
@@ -102,23 +119,60 @@ let private menu state dispatch =
 
                 $"""{summary.Name} ({summary.TrackCount} {plural "track" summary.TrackCount}){extra}"""
 
+            let enabled =
+                state.PlaylistsState.Playlists
+                |> List.exists (fun playlist -> playlist.Id = summary.PlaylistId)
+                |> not
+
+            let msg = if forDelete then OnDeletePlaylist else OnOpenPlaylist
+
             MenuItem.create
                 [ MenuItem.header name
                   MenuItem.fontSize 12.
-                  // TEMP-NMB...
-                  MenuItem.isEnabled false ]
+                  if forDelete then
+                      MenuItem.foreground COLOUR_DELETE
+                  MenuItem.isEnabled enabled
+                  MenuItem.onClick ((fun _ -> dispatch (msg summary.PlaylistId)), OnChangeOf summary.PlaylistId) ]
             :> IView
 
-        let playlistItems =
-            state.PlaylistSummaries
-            |> List.sortBy (fun summary -> summary.Name)
-            |> List.map playlistItem
+        let sortedSummaries =
+            state.PlaylistSummaries |> List.sortBy (fun summary -> summary.Name)
+
+        let enabledCount =
+            sortedSummaries
+            |> List.filter (fun summary ->
+                state.PlaylistsState.Playlists
+                |> List.exists (fun playlist -> playlist.Id = summary.PlaylistId)
+                |> not)
+            |> List.length
+
+        let openPlaylistItems = sortedSummaries |> List.map (playlistItem false)
+
+        let deletePlaylistItems = sortedSummaries |> List.map (playlistItem true)
 
         MenuItem.create
             [ MenuItem.header "Playlist"
               MenuItem.fontSize 12.
-              MenuItem.foreground COLOUR_DEBUG
-              MenuItem.viewItems playlistItems ]
+              MenuItem.viewItems
+                  [ MenuItem.create
+                        [ MenuItem.header "New"
+                          MenuItem.fontSize 12.
+                          MenuItem.onClick (fun _ -> dispatch OnNewPlaylist) ]
+                    MenuItem.create
+                        [ MenuItem.header "Open"
+                          MenuItem.fontSize 12.
+                          MenuItem.isEnabled (enabledCount > 0)
+                          MenuItem.viewItems openPlaylistItems ]
+                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
+                    MenuItem.create [ MenuItem.header "Add files"; MenuItem.fontSize 12.; MenuItem.onClick ignore ]
+                    MenuItem.create [ MenuItem.header "Add folder"; MenuItem.fontSize 12.; MenuItem.onClick ignore ]
+                    MenuItem.create [ MenuItem.header MENU_ITEM_SEPARATOR ]
+                    MenuItem.create
+                        [ MenuItem.header "Delete"
+                          MenuItem.fontSize 12.
+                          MenuItem.foreground COLOUR_DELETE
+                          MenuItem.isEnabled (enabledCount > 0)
+                          MenuItem.viewItems deletePlaylistItems ] ] ]
 
     let errorsMenu =
         MenuItem.create
@@ -130,13 +184,13 @@ let private menu state dispatch =
                   [ MenuItem.create
                         [ MenuItem.header (if state.ShowingErrors then "Hide" else "Show")
                           MenuItem.fontSize 12.
-                          MenuItem.onClick (fun _ -> dispatch ToggleShowingErrors) ]
+                          MenuItem.onClick (fun _ -> dispatch OnToggleShowingErrors) ]
                     MenuItem.create
                         [ MenuItem.header "Clear all"
                           MenuItem.fontSize 12.
                           MenuItem.foreground COLOUR_REMOVE
                           MenuItem.isEnabled (state.Errors.Length > 0)
-                          MenuItem.onClick (fun _ -> dispatch ClearAllErrors) ] ] ]
+                          MenuItem.onClick (fun _ -> dispatch OnClearAllErrors) ] ] ]
 
     Menu.create
         [ Menu.dock Dock.Top
@@ -169,7 +223,7 @@ let private errorsView (errors: (ErrorId * DateTime * string) list) dispatch =
                           Button.margin (10, 0, 0, 0)
                           Button.content (Icons.remove true (Some COLOUR_REMOVE) None)
                           Button.tip "Clear error"
-                          Button.onClick (fun _ -> dispatch (ClearError errorId)) ]
+                          Button.onClick (fun _ -> dispatch (OnClearError errorId)) ]
                     TextBlock.create
                         [ TextBlock.verticalAlignment VerticalAlignment.Center
                           TextBlock.textAlignment TextAlignment.Left

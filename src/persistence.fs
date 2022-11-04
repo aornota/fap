@@ -82,6 +82,17 @@ let write persistenceType name (data: 'a) =
             return Error $"Persistence.write -> {exn.Message}"
     }
 
+let delete persistenceType name =
+    async {
+        let file = Path.Combine((folder persistenceType).FullName, name)
+
+        try
+            File.Delete file
+            return Ok()
+        with exn ->
+            return Error $"Persistence.delete -> {exn.Message}"
+    }
+
 let listNamesWithoutExtension persistenceType =
     let nameWithoutExtension (name: string) extensionLength =
         match name.Length with

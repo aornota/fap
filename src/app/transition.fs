@@ -26,20 +26,30 @@ type Msg =
     | UpdateTitle
     | UpdateIcon
     | SessionOpened of Session
-    // NewPlaylistAdded
-    | ToggleAutoPlaySession
-    | ToggleShowingErrors
+    | SessionDeleted of SessionId
+    | NewPlaylistAdded of Playlists.Model.Playlist
+    | PlaylistOpened of Playlists.Model.Playlist
+    | PlaylistDeleted of Playlists.Model.PlaylistId
     | AddError of string
-    | ClearError of ErrorId
-    | ClearAllErrors
-    | WriteSession of WriteSessionRequestSource
-    | DebounceWriteSessionRequest of WriteSessionRequestId * WriteSessionRequestSource
+    | UpdateSessionSummary
+    | WriteSession
+    | DebounceWriteSessionRequest of WriteSessionRequestId
     | WritePreferences of WritePreferencesRequestSource
     | DebounceWritePreferencesRequest of WritePreferencesRequestId * WritePreferencesRequestSource
     // UI
     | OnNewSession
     | OnOpenSession of SessionId
+    | OnDeleteSession of SessionId
+    | OnToggleAutoPlaySession
     | OnExit
+    | OnNewPlaylist
+    | OnOpenPlaylist of Playlists.Model.PlaylistId
+    // TODO-NMB...OnAddFiles
+    // TODO-NMB...OnAddFolder
+    | OnDeletePlaylist of Playlists.Model.PlaylistId
+    | OnToggleShowingErrors
+    | OnClearAllErrors
+    | OnClearError of ErrorId
     // From Playlists
     | PlaylistsMsg of Playlists.Transition.Msg
     // From HostWindow subscriptions
@@ -80,18 +90,16 @@ let private handleResult =
     | Ok _ -> NoOp
     | Error error -> AddError error
 
-let private handlePlaylistsExternal msg =
-    match msg with
-    | Playlists.Transition.ExternalMsg.NotifyPlaylistsChanged -> Cmd.ofMsg (WriteSession PlaylistsChanged)
+let private handlePlaylistsExternal externalMsg =
+    match externalMsg with
+    | Playlists.Transition.ExternalMsg.NotifyNewPlaylistAdded playlist -> Cmd.ofMsg (NewPlaylistAdded playlist)
+    | Playlists.Transition.ExternalMsg.NotifyPlaylistsChanged -> Cmd.ofMsg UpdateSessionSummary
     | Playlists.Transition.ExternalMsg.NotifyTrackStateChanged ->
-        Cmd.batch
-            [ Cmd.ofMsg UpdateTitle
-              Cmd.ofMsg UpdateIcon
-              Cmd.ofMsg (WriteSession TrackStateChanged) ]
+        Cmd.batch [ Cmd.ofMsg UpdateTitle; Cmd.ofMsg UpdateIcon; Cmd.ofMsg WriteSession ]
     | Playlists.Transition.ExternalMsg.NotifyMutedToggled ->
         Cmd.batch [ Cmd.ofMsg UpdateIcon; Cmd.ofMsg (WritePreferences Player) ]
     | Playlists.Transition.ExternalMsg.NotifyVolumeChanged -> Cmd.ofMsg (WritePreferences Player)
-    | Playlists.Transition.ExternalMsg.NotifyError text -> Cmd.ofMsg (AddError text)
+    | Playlists.Transition.ExternalMsg.NotifyError error -> Cmd.ofMsg (AddError error)
 
 let init preferences session sessionIds playlistIds (startupErrors: string list) (player: MediaPlayer) =
     let playlistsState, playlistsMsgs =
@@ -103,8 +111,13 @@ let init preferences session sessionIds playlistIds (startupErrors: string list)
             preferences.AutoPlaySession
             player
 
+    let sessionSummaries = [ sessionSummary session ]
+
+    let sessionIds =
+        sessionIds |> List.filter (fun sessionId -> sessionId <> session.Id)
+
     { Session = session
-      SessionSummaries = []
+      SessionSummaries = sessionSummaries
       PlaylistSummaries = []
       AutoPlaySession = preferences.AutoPlaySession
       ShowingErrors = isDebug && startupErrors.Length > 0
@@ -116,7 +129,7 @@ let init preferences session sessionIds playlistIds (startupErrors: string list)
       WritePreferencesRequests = []
       PlaylistsState = playlistsState },
     Cmd.batch
-        [ Cmd.ofMsg (ReadSessions(sessionIds, []))
+        [ Cmd.ofMsg (ReadSessions(sessionIds, sessionSummaries))
           Cmd.ofMsg (ReadPlaylists(playlistIds, []))
           yield! playlistsMsgs |> List.map (Cmd.ofMsg >> (Cmd.map PlaylistsMsg)) ]
 
@@ -199,39 +212,93 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         Cmd.batch
             [ Cmd.ofMsg (WritePreferences App)
               yield! playlistsMsgs |> List.map (Cmd.ofMsg >> (Cmd.map PlaylistsMsg)) ]
-    | ToggleAutoPlaySession ->
-        { state with AutoPlaySession = not state.AutoPlaySession }, Cmd.ofMsg (WritePreferences App)
-    | ToggleShowingErrors -> { state with ShowingErrors = not state.ShowingErrors }, Cmd.none
+    | SessionDeleted sessionId ->
+        match
+            state.SessionSummaries
+            |> List.tryFind (fun summary -> summary.SessionId = sessionId)
+        with
+        | Some _ ->
+            let newSessionSummaries =
+                state.SessionSummaries
+                |> List.filter (fun summary -> summary.SessionId <> sessionId)
+
+            { state with SessionSummaries = newSessionSummaries }, Cmd.none
+        | None -> state, Cmd.ofMsg (AddError $"App.transition -> {nameof (Session)} ({sessionId} not in summaries")
+    | NewPlaylistAdded playlist ->
+        match
+            state.PlaylistSummaries
+            |> List.tryFind (fun summary -> summary.PlaylistId = playlist.Id)
+        with
+        | Some _ ->
+            state,
+            Cmd.ofMsg (
+                AddError $"App.transition -> {nameof (Playlists.Model.Playlist)} ({playlist.Id} already in summaries"
+            )
+        | None ->
+            { state with PlaylistSummaries = playlistSummary playlist :: state.PlaylistSummaries },
+            Cmd.ofMsg UpdateSessionSummary
+    | PlaylistOpened playlist ->
+        state, Cmd.map PlaylistsMsg (Cmd.ofMsg (Playlists.Transition.Msg.NotifyPlaylistOpened playlist))
+    | PlaylistDeleted playilstId ->
+        match
+            state.PlaylistSummaries
+            |> List.tryFind (fun summary -> summary.PlaylistId = playilstId)
+        with
+        | Some _ ->
+            let newPlaylistSummaries =
+                state.PlaylistSummaries
+                |> List.filter (fun summary -> summary.PlaylistId <> playilstId)
+
+            { state with PlaylistSummaries = newPlaylistSummaries }, Cmd.none
+        | None ->
+            state,
+            Cmd.ofMsg (AddError $"App.transition -> {nameof (Playlists.Model.Playlist)} ({playilstId} not in summaries")
     | AddError error -> { state with Errors = makeError error :: state.Errors }, Cmd.none
-    | ClearError errorId ->
-        { state with
-            Errors =
-                state.Errors
-                |> List.filter (fun (otherErrorId, _, _) -> otherErrorId <> errorId) },
-        Cmd.none
-    | ClearAllErrors -> { state with Errors = [] }, Cmd.none
-    | WriteSession source ->
-        let writeSessionRequest = WriteSessionRequestId.Create(), source
+    | UpdateSessionSummary ->
+        let newSessionSummary =
+            { SessionId = state.Session.Id
+              Name = state.Session.Name
+              PlaylistCount = state.PlaylistsState.Playlists.Length }
+
+        match
+            state.SessionSummaries
+            |> List.tryFind (fun summary -> summary.SessionId = newSessionSummary.SessionId)
+        with
+        | Some _ ->
+            let newSessionSummaries =
+                state.SessionSummaries
+                |> List.map (fun summary ->
+                    if summary.SessionId = newSessionSummary.SessionId then
+                        newSessionSummary
+                    else
+                        summary)
+
+            { state with SessionSummaries = newSessionSummaries }, Cmd.ofMsg WriteSession
+        | None ->
+            state,
+            Cmd.ofMsg (AddError $"App.transition -> {nameof (Session)} ({newSessionSummary.SessionId} not in summaries")
+    | WriteSession ->
+        let writeSessionRequestId = WriteSessionRequestId.Create()
 
         let delay () =
             async {
                 do! Async.Sleep DEBOUNCE_WRITE_SESSION_REQUEST_DELAY
-                return writeSessionRequest
+                return writeSessionRequestId
             }
 
-        { state with WriteSessionRequests = writeSessionRequest :: state.WriteSessionRequests },
+        { state with WriteSessionRequests = writeSessionRequestId :: state.WriteSessionRequests },
         Cmd.OfAsync.perform delay () DebounceWriteSessionRequest
-    | DebounceWriteSessionRequest (writeSessionRequestId, source) ->
+    | DebounceWriteSessionRequest writeSessionRequestId ->
         let newWriteSessionRequests =
             state.WriteSessionRequests
-            |> List.filter (fun (otherWriteSessionRequestId, _) -> otherWriteSessionRequestId <> writeSessionRequestId)
+            |> List.filter (fun otherWriteSessionRequestId -> otherWriteSessionRequestId <> writeSessionRequestId)
 
-        match
-            newWriteSessionRequests
-            |> List.filter (fun (_, otherSource) -> otherSource = source)
-        with
+        match newWriteSessionRequests with
         | _ :: _ -> { state with WriteSessionRequests = newWriteSessionRequests }, Cmd.none
         | [] ->
+            let newPlaylistIds =
+                state.PlaylistsState.Playlists |> List.map (fun playlist -> playlist.Id)
+
             let newLastTrackId =
                 match state.PlaylistsState.TrackState with
                 | Some trackState ->
@@ -240,15 +307,13 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                     | _ -> Some trackState.Track.Id
                 | None -> None
 
-            let write =
-                match source with
-                | PlaylistsChanged -> true
-                | TrackStateChanged -> state.Session.LastTrackId <> newLastTrackId
-
-            if write then
+            if
+                newPlaylistIds <> state.Session.PlaylistIds
+                || newLastTrackId <> state.Session.LastTrackId
+            then
                 let newSession =
                     { state.Session with
-                        PlaylistIds = state.PlaylistsState.Playlists |> List.map (fun playlist -> playlist.Id)
+                        PlaylistIds = newPlaylistIds
                         LastTrackId = newLastTrackId }
 
                 { state with
@@ -353,9 +418,60 @@ let transition msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 AddError $"App.transition -> Unable to read {nameof (Session)} ({guid}): {readErrorText readError}"
 
         state, Cmd.OfAsync.perform read () handleResult
+    | OnDeleteSession sessionId ->
+        let delete () =
+            async { return! deleteSession sessionId }
+
+        let handleResult =
+            function
+            | Ok () -> SessionDeleted sessionId
+            | Error error ->
+                let (SessionId guid) = sessionId
+                AddError $"App.transition -> Unable to delete {nameof (Session)} ({guid}): {error}"
+
+        state, Cmd.OfAsync.perform delete () handleResult
+    | OnToggleAutoPlaySession ->
+        { state with AutoPlaySession = not state.AutoPlaySession }, Cmd.ofMsg (WritePreferences App)
     | OnExit ->
         shutdown ()
         noChange
+    | OnNewPlaylist -> state, Cmd.map PlaylistsMsg (Cmd.ofMsg Playlists.Transition.Msg.NotifyNewPlaylistRequested)
+    | OnOpenPlaylist playlistId ->
+        let read () =
+            async { return! Playlists.Model.readPlaylist playlistId }
+
+        let handleResult =
+            function
+            | Ok playlist -> PlaylistOpened playlist
+            | Error readError ->
+                let (Playlists.Model.PlaylistId guid) = playlistId
+
+                AddError
+                    $"App.transition -> Unable to read {nameof (Playlists.Model.Playlist)} ({guid}): {readErrorText readError}"
+
+        state, Cmd.OfAsync.perform read () handleResult
+    // TODO-NMB: OnAddFiles...
+    // TODO-NMB: OnAddFolder...
+    | OnDeletePlaylist playlistId ->
+        let delete () =
+            async { return! Playlists.Model.deletePlaylist playlistId }
+
+        let handleResult =
+            function
+            | Ok () -> PlaylistDeleted playlistId
+            | Error error ->
+                let (Playlists.Model.PlaylistId guid) = playlistId
+                AddError $"App.transition -> Unable to delete {nameof (Playlists.Model.Playlist)} ({guid}): {error}"
+
+        state, Cmd.OfAsync.perform delete () handleResult
+    | OnToggleShowingErrors -> { state with ShowingErrors = not state.ShowingErrors }, Cmd.none
+    | OnClearAllErrors -> { state with Errors = [] }, Cmd.none
+    | OnClearError errorId ->
+        { state with
+            Errors =
+                state.Errors
+                |> List.filter (fun (otherErrorId, _, _) -> otherErrorId <> errorId) },
+        Cmd.none
     // From Playlists
     | PlaylistsMsg playlistsMsg ->
         let newPlaylistState, cmd, externalMsgs =

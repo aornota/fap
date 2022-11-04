@@ -71,23 +71,18 @@ type State =
       SeekRequests: SeekRequestId list }
 
 [<Literal>]
-let NEW_PLAYLIST = "new playlist"
-
-[<Literal>]
 let START_POSITION = 0f
 
 let private playlistFile (PlaylistId guid) = $"{guid}.{fileExtension Playlist}"
-
-let newPlaylist () =
-    { Id = PlaylistId.Create()
-      Name = NEW_PLAYLIST
-      Items = [] }
 
 let readPlaylist playlistId =
     async { return! read<Playlist> Playlist (playlistFile playlistId) }
 
 let writePlaylist playlist =
     async { return! write Playlist (playlistFile playlist.Id) playlist }
+
+let deletePlaylist playlistId =
+    async { return! delete Playlist (playlistFile playlistId) }
 
 let isTrackId trackId =
     function

@@ -38,10 +38,6 @@ type WriteSessionRequestId =
 
     static member Create() = WriteSessionRequestId(Guid.NewGuid())
 
-type WriteSessionRequestSource =
-    | PlaylistsChanged
-    | TrackStateChanged
-
 type WritePreferencesRequestId =
     | WritePreferencesRequestId of Guid
 
@@ -63,12 +59,12 @@ type State =
       LastNormalSize: float * float
       LastNormalLocation: int * int
       LastWindowState: WindowState
-      WriteSessionRequests: (WriteSessionRequestId * WriteSessionRequestSource) list
+      WriteSessionRequests: WriteSessionRequestId list
       WritePreferencesRequests: (WritePreferencesRequestId * WritePreferencesRequestSource) list
       PlaylistsState: Playlists.Model.State }
 
 [<Literal>]
-let NEW_SESSION = "new session"
+let private NEW_SESSION = "new session"
 
 let private sessionFile (SessionId guid) = $"{guid}.{fileExtension Session}"
 
@@ -83,6 +79,9 @@ let readSession sessionId =
 
 let writeSession session =
     async { return! write Session (sessionFile session.Id) session }
+
+let deleteSession sessionId =
+    async { return! delete Session (sessionFile sessionId) }
 
 let applicationIcon variant muted =
     let muted = if muted then $"-{ICON_VARIANT_MUTED}" else ""

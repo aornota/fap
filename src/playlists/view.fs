@@ -17,7 +17,7 @@ type private TrackForView =
     { TrackData: TrackData
       Colour: string
       CanMove: Direction list
-      CanAddSummary: RelativePosition option }
+      CanAddSubTotal: RelativePosition option }
 
 type private TotalType =
     | Complete
@@ -175,7 +175,7 @@ let private transformItems
                             { TrackData = trackData
                               Colour = colour
                               CanMove = canMove
-                              CanAddSummary = canAddSubTotal }
+                              CanAddSubTotal = canAddSubTotal }
 
                         TrackForView itemForView :: itemsForView, trackData.Duration :: durations
                     | SubTotal subTotal ->
@@ -233,7 +233,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                 | None -> COLOUR_DISABLED_TEXT
 
             let moveUpOrAddBelow =
-                match track.CanAddSummary with
+                match track.CanAddSubTotal with
                 | Some Below ->
                     button
                         Icons.addBelow
@@ -258,7 +258,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         (Some track.TrackData.Id)
 
             let moveDownOrAddAbove =
-                match track.CanAddSummary with
+                match track.CanAddSubTotal with
                 | Some Above ->
                     button
                         Icons.addAbove

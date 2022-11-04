@@ -3,9 +3,9 @@ module Aornota.Fap.Literals
 [<Literal>]
 let APPLICATION_NAME = "fap"
 
-// (pre-α | α | β | γ) | *δ* | ε | ζ | η | θ | ι | κ | λ | μ | ν | ξ | ο | π | ρ) | σ | τ | υ | φ | χ | ψ | ω
+// (pre-α | α | β | γ | δ) | *ε* | ζ | η | θ | ι | κ | λ | μ | ν | ξ | ο | π | ρ) | σ | τ | υ | φ | χ | ψ | ω
 [<Literal>]
-let APPLICATION_VERSION = "δ" // note: also update ..\README.md
+let APPLICATION_VERSION = "ε" // note: also update ..\README.md
 
 // #region Colours
 [<Literal>]
@@ -36,7 +36,7 @@ let COLOUR_TOTAL = "#98fb98" // palegreen
 let COLOUR_REMOVE = "#ffa07a" // lightsalmon
 
 [<Literal>]
-let COLOUR_DEBUG = "#dda0dd" // plum
+let COLOUR_DELETE = "#f08080" // lightcoral
 
 [<Literal>]
 let COLOUR_DISABLED_ICON = "#404040"

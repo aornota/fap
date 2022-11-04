@@ -25,6 +25,7 @@ type RelativePosition =
     | Below
 
 type ExternalMsg =
+    | NotifyNewPlaylistAdded of Playlist
     | NotifyPlaylistsChanged
     | NotifyTrackStateChanged
     | NotifyMutedToggled
@@ -60,11 +61,17 @@ type Msg =
     | OnStop
     | OnToggleMuted
     | OnVolume of int
+    // From App
+    | NotifyNewPlaylistRequested
+    | NotifyPlaylistOpened of Playlist
     // From MediaPlayer subscriptions
     | NotifyErrored
     | NotifyPlaying
     | NotifyPositionChanged of float32
     | NotifyEnded
+
+[<Literal>]
+let private NEW_PLAYLIST = "new playlist"
 
 [<Literal>]
 let private DEBOUNCE_WRITE_PLAYLIST_REQUEST_DELAY = 250
@@ -127,8 +134,6 @@ let init playlistIds lastTrackId muted volume autoPlay (player: MediaPlayer) =
 
 (* Notes:
     -- If change TrackState.Track (including setting TrackState to None) or TrackState.PlayerStatus, call (external) NotifyTrackStateChanged.
-    -- If add / remove / reorder Playlists, call (external) NotifyPlaylistsChanged.
-    -- If add new Playlist, call (external) NewPlaylistAdded?
     -- If add / remove / reorder Items for Playlist, call (internal) WritePlaylist. *)
 
 let transition msg state (player: MediaPlayer) =
@@ -828,6 +833,30 @@ let transition msg state (player: MediaPlayer) =
             externalMsgs
         else
             noChange
+    // From App
+    | NotifyNewPlaylistRequested ->
+        let newPlaylist =
+            { Id = PlaylistId.Create()
+              Name = NEW_PLAYLIST
+              Items = [] }
+
+        let newPlaylists = newPlaylist :: (state.Playlists |> List.rev) |> List.rev
+
+        { state with Playlists = newPlaylists },
+        Cmd.ofMsg (WritePlaylist newPlaylist.Id),
+        [ NotifyNewPlaylistAdded newPlaylist ]
+    | NotifyPlaylistOpened playlist ->
+        let cmd =
+            if state.Playlists.Length = 0 then
+                Cmd.ofMsg (RequestDefaultTrack(Some playlist, false))
+            else
+                Cmd.none
+
+        { state with
+            Playlists = playlist :: (state.Playlists |> List.rev) |> List.rev
+            SelectedPlaylistId = Some playlist.Id },
+        cmd,
+        [ NotifyPlaylistsChanged ]
     // From MediaPlayer subscriptions
     | NotifyErrored ->
         match state.TrackState with
