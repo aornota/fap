@@ -7,20 +7,24 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="literals.fs" />
+    <Compile Include="literals\application.fs" />
+    <Compile Include="literals\colours.fs" />
+    <Compile Include="literals\file-extensions.fs" />
+    <Compile Include="literals\folders.fs" />
+    <Compile Include="literals\icon-variants.fs" />
+    <Compile Include="literals\miscellaneous.fs" />
     <Compile Include="persistence.fs" />
     <Compile Include="utilities.fs" />
-    <Compile Include="extensions.fs" />
     <Compile Include="icons.fs" />
     <Compile Include="playlists\model.fs" />
     <Compile Include="playlists\transition.fs" />
     <Compile Include="playlists\view.fs" />
-    <Compile Include="app\model.fs" />
-    <Compile Include="app\preferences.fs" />
-    <Compile Include="app\transition.fs" />
-    <Compile Include="app\view.fs" />
-    <Compile Include="app\subscriptions.fs" />
-    <Compile Include="app\program.fs" />
+    <Compile Include="application\model.fs" />
+    <Compile Include="application\preferences.fs" />
+    <Compile Include="application\transition.fs" />
+    <Compile Include="application\view.fs" />
+    <Compile Include="application\subscriptions.fs" />
+    <Compile Include="application\program.fs" />
     <AvaloniaResource Include="assets\images\**" />
   </ItemGroup>
   <ItemGroup>

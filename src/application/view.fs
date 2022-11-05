@@ -1,9 +1,10 @@
-module Aornota.Fap.App.View
+module Aornota.Fap.Application.View
 
 open Aornota.Fap
-open Aornota.Fap.App.Model
-open Aornota.Fap.App.Transition
-open Aornota.Fap.Literals
+open Aornota.Fap.Application.Model
+open Aornota.Fap.Application.Transition
+open Aornota.Fap.Literals.Colours
+open Aornota.Fap.Literals.Miscellaneous
 open Aornota.Fap.Utilities
 open Avalonia.Controls
 open Avalonia.FuncUI
@@ -196,7 +197,7 @@ let private menu state dispatch =
                                   "Show debug-only"
                           )
                           MenuItem.fontSize 12.
-                          MenuItem.isEnabled hasDebugOnly
+                          MenuItem.isEnabled (hasDebugOnly || state.ShowingDebugOnlyErrors)
                           MenuItem.onClick (fun _ -> dispatch OnToggleShowingDebugOnlyErrors) ]
                     MenuItem.create
                         [ MenuItem.header "Clear all"

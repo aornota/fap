@@ -1,13 +1,10 @@
-module Aornota.Fap.App.Subscriptions
+module Aornota.Fap.Application.Subscriptions
 
-open Aornota.Fap.App
-open Aornota.Fap.App.Model
 open Avalonia.FuncUI.Hosts
 open Elmish
 open LibVLCSharp.Shared
 open System
 
-// #region HostWindow subscription
 let locationChanged (window: HostWindow) =
     let sub dispatch =
         window.PositionChanged.Subscribe(fun _ -> dispatch Transition.Msg.LocationChanged)
@@ -21,9 +18,7 @@ let effectiveViewportChanged (window: HostWindow) =
         |> ignore
 
     Cmd.ofSub sub
-// #endregion
 
-// #region MediaPlayer subscription
 let playbackErrored (player: MediaPlayer) =
     let sub dispatch =
         player.EncounteredError.Subscribe(fun _ -> dispatch Transition.Msg.PlayerErrored)
@@ -51,4 +46,3 @@ let ended (player: MediaPlayer) =
         |> ignore
 
     Cmd.ofSub sub
-// #endregion

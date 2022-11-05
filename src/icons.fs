@@ -3,7 +3,7 @@ module Aornota.Fap.Icons
 
 // See https://materialdesignicons.com/.
 
-open Aornota.Fap.Literals
+open Aornota.Fap.Literals.Colours
 open Avalonia.Controls
 open Avalonia.Controls.Shapes
 open Avalonia.FuncUI.DSL
@@ -24,7 +24,7 @@ let private create (pathData: string) enabled enabledColourOverride disabledColo
           Canvas.height SIZE_CANVAS
           Canvas.children [ Path.create [ Path.fill colour; Path.data pathData ] ] ]
 
-// #region Player icons
+// Player icons
 let previous = create "M6,18V6H8V18H6M9.5,12L18,6V18L9.5,12Z"
 
 let play = create "M8,5.14V19.14L19,12.14L8,5.14Z"
@@ -47,9 +47,8 @@ let unmutedMedium =
 let unmutedHigh =
     create
         "M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z"
-// #endregion
 
-// #region Miscellaneous icons
+// Miscellaneous icons
 let remove =
     create
         "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"
@@ -69,4 +68,3 @@ let addAbove =
 let addBelow =
     create
         "M22,10A2,2 0 0,1 20,12H4A2,2 0 0,1 2,10V3H4V5H8V3H10V5H14V3H16V5H20V3H22V10M4,10H8V7H4V10M10,10H14V7H10V10M20,10V7H16V10H20M11,14H13V17H16V19H13V22H11V19H8V17H11V14Z"
-// #endregion

@@ -1,19 +1,19 @@
 module Aornota.Fap.Utilities
 
-open Aornota.Fap.Literals
+open Aornota.Fap.Literals.FileExtensions
 open System
 
 [<Measure>]
 type millisecond
 
 [<Literal>]
-let SECOND = 1000L<millisecond>
+let private SECOND = 1000L<millisecond>
 
 [<Literal>]
-let SECONDS_PER_MINUTE = 60L
+let private SECONDS_PER_MINUTE = 60L
 
 [<Literal>]
-let MINUTES_PER_HOUR = 60L
+let private MINUTES_PER_HOUR = 60L
 
 let private minute = SECOND * SECONDS_PER_MINUTE
 let private hour = minute * MINUTES_PER_HOUR
@@ -72,7 +72,7 @@ let private formatTime roundUp (value: int64<millisecond>) =
 let durationText =
     function
     | Some duration -> formatTime true duration
-    | None -> "N/A"
+    | None -> "-"
 
 let positionText (positionValue: float32) (duration: int64<millisecond> option) =
     match duration with

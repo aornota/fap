@@ -1,7 +1,8 @@
 module Aornota.Fap.Playlists.View
 
 open Aornota.Fap
-open Aornota.Fap.Literals
+open Aornota.Fap.Literals.Colours
+open Aornota.Fap.Literals.Miscellaneous
 open Aornota.Fap.Playlists.Model
 open Aornota.Fap.Playlists.Transition
 open Aornota.Fap.Utilities
@@ -42,7 +43,7 @@ let private colour playerState =
     | NoMedia
     | Stopped _
     | Ended -> COLOUR_INACTIVE
-    | AwaitingPlay _
+    | AwaitingPlay
     | Paused _ -> COLOUR_AWAITING
     | Playing _ -> COLOUR_ACTIVE
     | PlaybackErrored -> COLOUR_ERROR
@@ -59,7 +60,9 @@ let private button<'a>
     (onChangeOf: 'a option)
     =
     Button.create
-        [ Button.dock dock
+        [ match dock with
+          | Some dock -> Button.dock dock
+          | None -> ()
           Button.width SIZE_BUTTON_WITH_ICON
           Button.height SIZE_BUTTON_WITH_ICON
           Button.background COLOUR_BACKGROUND
@@ -87,7 +90,7 @@ let private transformItems
             | Track _ -> false
         | None -> false
 
-    let trackCountAndtotalDuration (durations: int64<millisecond> option list) =
+    let trackCountAndTotalDuration (durations: int64<millisecond> option list) =
         let trackCount = durations.Length
         let knownDurations = durations |> List.choose id
 
@@ -170,7 +173,7 @@ let private transformItems
 
                         TrackForView itemForView :: itemsForView, trackData.Duration :: durations
                     | SubTotal subTotal ->
-                        let trackCount, totalDuration = trackCountAndtotalDuration durations
+                        let trackCount, totalDuration = trackCountAndTotalDuration durations
 
                         let itemForView =
                             { Id = if subTotal <> autoSubTotalId then Some subTotal else None
@@ -187,7 +190,7 @@ let private transformItems
                 | TrackForView track -> Some(track.TrackData.Duration)
                 | _ -> None)
 
-        let trackCount, totalDuration = trackCountAndtotalDuration durations
+        let trackCount, totalDuration = trackCountAndTotalDuration durations
 
         let total =
             { TrackCount = trackCount
@@ -228,7 +231,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                 | Some Below ->
                     button
                         Icons.addBelow
-                        Dock.Left
+                        (Some Dock.Left)
                         true
                         (Some COLOUR_SUB_TOTAL)
                         None
@@ -239,7 +242,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                 | _ ->
                     button
                         Icons.up
-                        Dock.Left
+                        (Some Dock.Left)
                         (track.CanMove |> List.contains (Vertical Up))
                         (Some track.Colour)
                         None
@@ -253,7 +256,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                 | Some Above ->
                     button
                         Icons.addAbove
-                        Dock.Left
+                        (Some Dock.Left)
                         true
                         (Some COLOUR_SUB_TOTAL)
                         None
@@ -264,7 +267,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                 | _ ->
                     button
                         Icons.down
-                        Dock.Left
+                        (Some Dock.Left)
                         (track.CanMove |> List.contains (Vertical Down))
                         (Some track.Colour)
                         None
@@ -288,7 +291,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         moveDownOrAddAbove
                         button
                             Icons.remove
-                            Dock.Right
+                            (Some Dock.Right)
                             true
                             (Some COLOUR_REMOVE)
                             None
@@ -298,7 +301,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                             (Some track.TrackData.Id)
                         button
                             Icons.right
-                            Dock.Right
+                            (Some Dock.Right)
                             (track.CanMove |> List.contains (Horizontal Right))
                             (Some track.Colour)
                             None
@@ -308,7 +311,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                             (Some track.TrackData.Id)
                         button
                             Icons.left
-                            Dock.Right
+                            (Some Dock.Right)
                             (track.CanMove |> List.contains (Horizontal Left))
                             (Some track.Colour)
                             None
@@ -350,7 +353,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
                         | Some subTotalId ->
                             button
                                 Icons.remove
-                                Dock.Right
+                                (Some Dock.Right)
                                 true
                                 (Some COLOUR_REMOVE)
                                 None
@@ -415,7 +418,7 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
               DockPanel.children
                   [ button
                         Icons.left
-                        Dock.Left
+                        (Some Dock.Left)
                         (not isFirstPlaylist)
                         (Some COLOUR_INACTIVE)
                         None
@@ -425,7 +428,7 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
                         (Some playlist.Id)
                     button
                         Icons.right
-                        Dock.Left
+                        (Some Dock.Left)
                         (not isLastPlaylist)
                         (Some COLOUR_INACTIVE)
                         None
@@ -435,7 +438,7 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
                         (Some playlist.Id)
                     button
                         Icons.remove
-                        Dock.Right
+                        (Some Dock.Right)
                         true
                         (Some COLOUR_REMOVE)
                         None
@@ -471,7 +474,6 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
 
     TabItem.create
         [ TabItem.header playlist.Name
-          //TabItem.headerTemplate (DataTemplateView<string>.create (playlistHeaderTemplate playlist.Id))
           TabItem.foreground colour
           TabItem.fontSize 13.
           TabItem.isSelected (Some playlist.Id = selectedPlaylistId)
@@ -572,26 +574,6 @@ let private trackDetails trackState (colour: string) =
           TextBlock.text details ]
 
 let private media state dispatch =
-    let button
-        (fIcon: bool -> string option -> string option -> IView<Canvas>)
-        enabled
-        enabledColourOverride
-        disabledColourOverride
-        leftMargin
-        (tip: string)
-        onClick
-        =
-        Button.create
-            [ Button.width SIZE_BUTTON_WITH_ICON
-              Button.height SIZE_BUTTON_WITH_ICON
-              Button.background COLOUR_BACKGROUND
-              Button.margin (leftMargin, 0, 0, 0)
-              Button.cornerRadius 0
-              Button.content (fIcon enabled enabledColourOverride disabledColourOverride)
-              if enabled then
-                  Button.tip tip
-              Button.onClick (if enabled then onClick else ignore) ]
-
     let isPlayingOrAwaitingPlay, allowPrevious, allowNext, allowPlay, playDisabledColourOverride, allowPause, allowStop =
         match state.TrackState with
         | Some trackState ->
@@ -600,7 +582,7 @@ let private media state dispatch =
 
             match trackState.PlayerState with
             | NoMedia -> false, allowPrevious, allowNext, true, None, false, false
-            | AwaitingPlay _ -> true, allowPrevious, allowNext, false, Some COLOUR_AWAITING, false, false
+            | AwaitingPlay -> true, allowPrevious, allowNext, false, Some COLOUR_AWAITING, false, false
             | PlaybackErrored -> false, allowPrevious, allowNext, false, Some COLOUR_ERROR, false, false
             | Playing _ -> true, allowPrevious, allowNext, false, None, true, true
             | Paused _ -> false, allowPrevious, allowNext, true, None, false, true
@@ -634,29 +616,68 @@ let private media state dispatch =
           StackPanel.children
               [ button
                     Icons.previous
+                    None
                     allowPrevious
                     (Some previousAndNextEnabledColourOverride)
                     None
                     0
                     "Previous track"
                     (fun _ -> dispatch OnPrevious)
+                    None
 
                 if allowPause then
-                    button Icons.pause true (Some COLOUR_AWAITING) None 6 "Pause track" (fun _ -> dispatch OnPause)
+                    button
+                        Icons.pause
+                        None
+                        true
+                        (Some COLOUR_AWAITING)
+                        None
+                        6
+                        "Pause track"
+                        (fun _ -> dispatch OnPause)
+                        None
                 else
-                    button Icons.play allowPlay None playDisabledColourOverride 6 "Play track" (fun _ -> dispatch OnPlay)
+                    button
+                        Icons.play
+                        None
+                        allowPlay
+                        None
+                        playDisabledColourOverride
+                        6
+                        "Play track"
+                        (fun _ -> dispatch OnPlay)
+                        None
 
-                button Icons.stop allowStop (Some COLOUR_INACTIVE) None 0 "Stop track" (fun _ -> dispatch OnStop)
-                button Icons.next allowNext (Some previousAndNextEnabledColourOverride) None 6 "Next track" (fun _ ->
-                    dispatch OnNext)
+                button
+                    Icons.stop
+                    None
+                    allowStop
+                    (Some COLOUR_INACTIVE)
+                    None
+                    0
+                    "Stop track"
+                    (fun _ -> dispatch OnStop)
+                    None
+                button
+                    Icons.next
+                    None
+                    allowNext
+                    (Some previousAndNextEnabledColourOverride)
+                    None
+                    6
+                    "Next track"
+                    (fun _ -> dispatch OnNext)
+                    None
                 button
                     muteOrUnmuteIcon
+                    None
                     (state.Volume <> 0)
                     (Some COLOUR_VOLUME)
                     (Some COLOUR_VOLUME)
                     20
                     muteOrUnmuteTip
                     (fun _ -> dispatch OnToggleMuted)
+                    None
                 Slider.create
                     [ Slider.verticalAlignment VerticalAlignment.Center
                       Slider.horizontalAlignment HorizontalAlignment.Center

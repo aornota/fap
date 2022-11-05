@@ -1,11 +1,27 @@
-module Aornota.Fap.App.Model
+module Aornota.Fap.Application.Model
 
 open Aornota.Fap
-open Aornota.Fap.Literals
+open Aornota.Fap.Literals.Application
+open Aornota.Fap.Literals.IconVariants
 open Aornota.Fap.Persistence
+open Avalonia
 open Avalonia.Controls
 open Avalonia.Media.Imaging
+open Avalonia.Platform
 open System
+
+[<Literal>]
+let private ASSETS_IMAGES = "avares://fap/assets/images/"
+
+type Bitmap with
+
+    static member FromImageAsset(name: string) : IBitmap =
+        new Bitmap(
+            AvaloniaLocator
+                .Current
+                .GetService<IAssetLoader>()
+                .Open(Uri($"{ASSETS_IMAGES}{name}", UriKind.RelativeOrAbsolute))
+        )
 
 type SessionId =
     | SessionId of Guid

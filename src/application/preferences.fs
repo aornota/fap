@@ -1,7 +1,7 @@
-module Aornota.Fap.App.Preferences
+module Aornota.Fap.Application.Preferences
 
-open Aornota.Fap.App.Model
-open Aornota.Fap.Literals
+open Aornota.Fap.Application.Model
+open Aornota.Fap.Literals.Application
 open Aornota.Fap.Persistence
 open Avalonia.Controls
 open System

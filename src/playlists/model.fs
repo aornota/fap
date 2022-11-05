@@ -1,9 +1,12 @@
 module Aornota.Fap.Playlists.Model
 
-open Aornota.Fap.Literals
+open Aornota.Fap.Literals.IconVariants
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open System
+
+[<Literal>]
+let START_POSITION = 0f
 
 type TrackId =
     | TrackId of Guid
@@ -111,8 +114,8 @@ let findTrack playlists trackId =
     | [ playlist, trackMatches ] ->
         match trackMatches with
         | [ trackData ] -> Ok(playlist, trackData)
-        | [] -> Error $"no matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
-        | _ -> Error $"multiple matches for {trackId} for {nameof (Playlist)} {playlist.Name}"
+        | [] -> Error $"no matches for {trackId} for {playlist.Name}"
+        | _ -> Error $"multiple matches for {trackId} for {playlist.Name}"
     | [] -> Error $"no matches for {trackId}"
     | _ -> Error $"matches for {trackId} for multiple {nameof (Playlist)}s"
 
@@ -131,7 +134,7 @@ let iconVariant trackState =
         | NoMedia
         | Stopped _
         | Ended -> ICON_VARIANT_INACTIVE
-        | AwaitingPlay _
+        | AwaitingPlay
         | Paused _ -> ICON_VARIANT_AWAITING
         | Playing _ -> ICON_VARIANT_ACTIVE
         | PlaybackErrored -> ICON_VARIANT_ACTIVE

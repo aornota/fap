@@ -1,12 +1,13 @@
-module Aornota.Fap.App.Program
+module Aornota.Fap.Application.Program
 
 open Aornota.Fap
-open Aornota.Fap.App.Model
-open Aornota.Fap.App.Preferences
-open Aornota.Fap.App.Subscriptions
-open Aornota.Fap.App.Transition
-open Aornota.Fap.App.View
-open Aornota.Fap.Literals
+open Aornota.Fap.Application.Model
+open Aornota.Fap.Application.Preferences
+open Aornota.Fap.Application.Subscriptions
+open Aornota.Fap.Application.Transition
+open Aornota.Fap.Application.View
+open Aornota.Fap.Literals.Application
+open Aornota.Fap.Literals.IconVariants
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
 open Elmish
@@ -47,10 +48,11 @@ type AppWindow(preferences, session: Session, sessionIds, playlistIds, startupEr
 
         let init _ =
             init preferences session sessionIds playlistIds startupErrors player
+
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif
-        let updateWithServices msg state = transition msg state this player
+        let updateWithServices msg state = update msg state this player
 
         Program.mkProgram init updateWithServices view
         |> Program.withHost this

@@ -1,6 +1,8 @@
 module Aornota.Fap.Persistence
 
-open Aornota.Fap.Literals
+open Aornota.Fap.Literals.Application
+open Aornota.Fap.Literals.FileExtensions
+open Aornota.Fap.Literals.Folders
 open System
 open System.IO
 open Thoth.Json.Net
@@ -67,7 +69,7 @@ let read<'a> persistenceType name =
                     | Ok data -> Ok data
                     | Error error -> Error(Other error)
             with exn ->
-                return Error(Other $"Persistence.read -> {exn.Message}")
+                return Error(Other exn.Message)
     }
 
 let write persistenceType name (data: 'a) =
@@ -80,7 +82,7 @@ let write persistenceType name (data: 'a) =
             do! File.WriteAllTextAsync(file, json) |> Async.AwaitTask
             return Ok()
         with exn ->
-            return Error $"Persistence.write -> {exn.Message}"
+            return Error exn.Message
     }
 
 let delete persistenceType name =
@@ -91,7 +93,7 @@ let delete persistenceType name =
             File.Delete file
             return Ok()
         with exn ->
-            return Error $"Persistence.delete -> {exn.Message}"
+            return Error exn.Message
     }
 
 let listNamesWithoutExtension persistenceType =
