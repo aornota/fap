@@ -1,6 +1,7 @@
 module Aornota.Fap.Playlists.View
 
 open Aornota.Fap
+open Aornota.Fap.Literals.Application
 open Aornota.Fap.Literals.Colours
 open Aornota.Fap.Literals.Miscellaneous
 open Aornota.Fap.Playlists.Model
@@ -396,7 +397,7 @@ let private itemsView items isFirstPlaylist isLastPlaylist trackState dispatch =
               DataTemplateView<ItemForView>.create (fun itemForView -> itemForViewTemplate itemForView)
           ) ]
 
-let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState dispatch playlist : IView =
+let private playlistTab playlistsWidth firstAndLastPlaylistIds selectedPlaylistId trackState dispatch playlist : IView =
     let colour =
         match trackState with
         | Some trackState ->
@@ -465,6 +466,11 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
             [ DockPanel.verticalAlignment VerticalAlignment.Stretch
               DockPanel.horizontalAlignment HorizontalAlignment.Stretch
               DockPanel.lastChildFill true
+              match playlistsWidth with
+              | Some playlistsWidth ->
+                  DockPanel.minWidth playlistsWidth
+                  DockPanel.maxWidth playlistsWidth
+              | None -> ()
               DockPanel.children [ controls; content ] ]
 
     (* Note not using TabItem.headerTemplate because:
@@ -480,18 +486,20 @@ let private playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState di
           TabItem.content controlsAndContent
           TabItem.onTapped ((fun _ -> dispatch (OnSelectPlaylist playlist.Id)), OnChangeOf playlist.Id) ]
 
-let private playlistsView (playlists: Playlist list) selectedPlaylistId trackState dispatch =
+let private playlistsView playlistsWidth (playlists: Playlist list) selectedPlaylistId trackState dispatch =
     match playlists with
     | _ :: _ ->
         let firstAndLastPlaylistIds =
             (playlists |> List.head).Id, (playlists |> List.rev |> List.head).Id
 
         TabControl.create
-            [ TabControl.dock Dock.Top
+            [ TabControl.dock Dock.Left
               TabControl.tabStripPlacement Dock.Top
               TabControl.viewItems (
                   playlists
-                  |> List.map (playlistTab firstAndLastPlaylistIds selectedPlaylistId trackState dispatch)
+                  |> List.map (
+                      playlistTab playlistsWidth firstAndLastPlaylistIds selectedPlaylistId trackState dispatch
+                  )
               ) ]
         :> IView
     | [] ->
@@ -689,7 +697,7 @@ let private media state dispatch =
                       Slider.foreground COLOUR_VOLUME
                       Slider.value state.Volume
                       Slider.tip $"Volume: {state.Volume}%%"
-                      Slider.onValueChanged (fun value -> dispatch (OnVolume(value |> int))) ] ] ]
+                      Slider.onValueChanged (fun value -> dispatch (OnVolume(int value))) ] ] ]
 
 let private playerView state dispatch =
     let colour =
@@ -708,10 +716,23 @@ let private playerView state dispatch =
                 media state dispatch ] ]
     :> IView
 
-let view state dispatch =
-    let trackCount =
-        state.Playlists |> List.collect (fun playlist -> tracks playlist) |> List.length
+let view hostWidth state dispatch =
+    let hasTracks =
+        (state.Playlists |> List.collect (fun playlist -> tracks playlist) |> List.length) > 0
 
-    [ if trackCount > 0 then
+    let playlistsWidth =
+        match hasTracks, state.SimulationState with
+        | true, Some _ -> Some(((hostWidth - (float WINDOW_MINIMUM_WIDTH)) / 4.) + 500.)
+        | _ -> None
+
+    let colour =
+        match state.TrackState with
+        | Some trackState -> colour trackState.PlayerState
+        | None -> COLOUR_DISABLED_TEXT
+
+    [ if hasTracks then
           playerView state dispatch
-      playlistsView state.Playlists state.SelectedPlaylistId state.TrackState dispatch ]
+      playlistsView playlistsWidth state.Playlists state.SelectedPlaylistId state.TrackState dispatch
+      match hasTracks, state.SimulationState with
+      | true, Some simulationState -> Simulation.View.view colour simulationState
+      | _ -> () ]

@@ -75,6 +75,7 @@ type State =
       LastNormalSize: float * float
       LastNormalLocation: int * int
       LastWindowState: WindowState
+      ShowSimulation: bool
       LastAudioFolder: string
       WriteSessionRequests: WriteSessionRequestId list
       WritePreferencesRequests: (WritePreferencesRequestId * WritePreferencesRequestSource) list

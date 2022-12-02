@@ -16,6 +16,11 @@
     <Compile Include="persistence.fs" />
     <Compile Include="utilities.fs" />
     <Compile Include="icons.fs" />
+    <Compile Include="simulation\randomization.fs" />
+    <Compile Include="simulation\configuration.fs" />
+    <Compile Include="simulation\model.fs" />
+    <Compile Include="simulation\transition.fs" />
+    <Compile Include="simulation\view.fs" />
     <Compile Include="playlists\model.fs" />
     <Compile Include="playlists\transition.fs" />
     <Compile Include="playlists\view.fs" />

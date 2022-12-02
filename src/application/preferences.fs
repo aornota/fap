@@ -12,6 +12,7 @@ type Preferences =
       WindowState: WindowState
       LastSessionId: SessionId option
       AutoPlaySession: bool
+      ShowSimulation: bool
       LastAudioFolder: string
       Muted: bool
       Volume: int }
@@ -25,6 +26,7 @@ let defaultPreferences =
       WindowState = WindowState.Normal
       LastSessionId = None
       AutoPlaySession = false
+      ShowSimulation = true
       LastAudioFolder = myMusicFolder
       Muted = false
       Volume = 100 }

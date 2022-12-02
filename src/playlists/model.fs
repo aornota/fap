@@ -1,5 +1,6 @@
 module Aornota.Fap.Playlists.Model
 
+open Aornota.Fap
 open Aornota.Fap.Literals.IconVariants
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
@@ -70,7 +71,8 @@ type State =
       Volume: int
       TrackState: TrackState option
       WritePlaylistRequests: (WritePlaylistRequestId * PlaylistId) list
-      SeekRequests: SeekRequestId list }
+      SeekRequests: SeekRequestId list
+      SimulationState: Simulation.Model.State option }
 
 let private playlistFile (PlaylistId guid) = $"{guid}.{fileExtension Playlist}"
 

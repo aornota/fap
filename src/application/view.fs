@@ -9,6 +9,7 @@ open Aornota.Fap.Utilities
 open Avalonia.Controls
 open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
+open Avalonia.FuncUI.Hosts
 open Avalonia.FuncUI.Types
 open Avalonia.Layout
 open Avalonia.Media
@@ -70,7 +71,16 @@ let private menu state dispatch =
                                       "Enable auto-play"
                               )
                               MenuItem.fontSize 12.
-                              MenuItem.onClick (fun _ -> dispatch OnToggleAutoPlaySession) ] ] ]
+                              MenuItem.onClick (fun _ -> dispatch OnToggleAutoPlaySession) ]
+                        MenuItem.create
+                            [ MenuItem.header (
+                                  if state.ShowSimulation then
+                                      "Hide simulation"
+                                  else
+                                      "Show simulation"
+                              )
+                              MenuItem.fontSize 12.
+                              MenuItem.onClick (fun _ -> dispatch OnToggleShowSimulation) ] ] ]
 
         MenuItem.create
             [ MenuItem.header "Session"
@@ -297,15 +307,15 @@ let private errorsView showingDebugOnlyErrors (errors: (ErrorId * DateTime * str
         |> Some
     | [], false -> None
 
-let view state dispatch =
+let view (window: HostWindow) state dispatch =
     let session =
         TextBlock.create
             [ TextBlock.dock Dock.Top
               TextBlock.verticalAlignment VerticalAlignment.Center
-              TextBlock.horizontalAlignment HorizontalAlignment.Center
-              TextBlock.textAlignment TextAlignment.Center
+              TextBlock.horizontalAlignment HorizontalAlignment.Left
+              TextBlock.textAlignment TextAlignment.Left
               TextBlock.fontSize 16.
-              TextBlock.padding (0, 10, 0, 5)
+              TextBlock.padding (10, 5, 0, 10)
               TextBlock.foreground COLOUR_INACTIVE
               TextBlock.text state.Session.Name ]
 
@@ -319,4 +329,4 @@ let view state dispatch =
                 | Some errorsView -> errorsView
                 | None -> ()
                 session
-                yield! Playlists.View.view state.PlaylistsState (PlaylistsMsg >> dispatch) ] ]
+                yield! Playlists.View.view window.Width state.PlaylistsState (PlaylistsMsg >> dispatch) ] ]

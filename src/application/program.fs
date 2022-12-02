@@ -37,6 +37,7 @@ type AppWindow(preferences, session: Session, sessionIds, playlistIds, startupEr
         base.Width <- Math.Max(fst preferences.NormalSize, WINDOW_MINIMUM_WIDTH)
         base.Height <- Math.Max(snd preferences.NormalSize, WINDOW_MINIMUM_HEIGHT)
         base.Position <- PixelPoint(fst preferences.NormalLocation, snd preferences.NormalLocation)
+        // TODO-NMB: Why does setting to Maximized not work?...
         base.WindowState <- preferences.WindowState
         this.SystemDecorations <- SystemDecorations.Full
 
@@ -49,12 +50,14 @@ type AppWindow(preferences, session: Session, sessionIds, playlistIds, startupEr
         let init _ =
             init preferences session sessionIds playlistIds startupErrors player
 
+        let updateWithHostAndPlayer msg state = update msg state this player
+        let viewWithHost state dispatch = view this state dispatch
+
 #if DEBUG
         this.AttachDevTools(KeyGesture(Key.F12))
 #endif
-        let updateWithServices msg state = update msg state this player
 
-        Program.mkProgram init updateWithServices view
+        Program.mkProgram init updateWithHostAndPlayer viewWithHost
         |> Program.withHost this
         |> Program.withSubscription (fun _ -> locationChanged this)
         |> Program.withSubscription (fun _ -> effectiveViewportChanged this)

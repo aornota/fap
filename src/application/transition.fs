@@ -47,6 +47,7 @@ type Msg =
     | OnOpenSession of SessionId
     | OnDeleteSession of SessionId
     | OnToggleAutoPlaySession
+    | OnToggleShowSimulation
     | OnExit
     | OnNewPlaylist
     | OnOpenPlaylist of Playlists.Model.PlaylistId
@@ -97,6 +98,7 @@ let init
             preferences.Muted
             preferences.Volume
             preferences.AutoPlaySession
+            preferences.ShowSimulation
             player
 
     let sessionSummaries = [ sessionSummary session ]
@@ -112,6 +114,7 @@ let init
       LastNormalSize = preferences.NormalSize
       LastNormalLocation = preferences.NormalLocation
       LastWindowState = preferences.WindowState
+      ShowSimulation = preferences.ShowSimulation
       LastAudioFolder = preferences.LastAudioFolder
       WriteSessionRequests = []
       WritePreferencesRequests = []
@@ -200,6 +203,7 @@ let update msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 state.PlaylistsState.Muted
                 state.PlaylistsState.Volume
                 state.AutoPlaySession
+                state.ShowSimulation
                 player
 
         { state with
@@ -405,6 +409,7 @@ let update msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                       WindowState = window.WindowState
                       LastSessionId = Some state.Session.Id
                       AutoPlaySession = state.AutoPlaySession
+                      ShowSimulation = state.ShowSimulation
                       LastAudioFolder = state.LastAudioFolder
                       Muted = state.PlaylistsState.Muted
                       Volume = state.PlaylistsState.Volume }
@@ -439,6 +444,7 @@ let update msg (state: State) (window: HostWindow) (player: MediaPlayer) =
                 state.PlaylistsState.Muted
                 state.PlaylistsState.Volume
                 state.AutoPlaySession
+                state.ShowSimulation
                 player
 
         { state with
@@ -484,6 +490,11 @@ let update msg (state: State) (window: HostWindow) (player: MediaPlayer) =
         state, Cmd.OfAsync.perform delete () handleResult
     | OnToggleAutoPlaySession ->
         { state with AutoPlaySession = not state.AutoPlaySession }, Cmd.ofMsg (WritePreferences App)
+    | OnToggleShowSimulation ->
+        { state with ShowSimulation = not state.ShowSimulation },
+        Cmd.batch
+            [ Cmd.ofMsg (WritePreferences App)
+              Cmd.map PlaylistsMsg (Cmd.ofMsg Playlists.Transition.Msg.NotifyToggleShowSimulation) ]
     | OnExit ->
         match Avalonia.Application.Current.ApplicationLifetime with
         | :? IClassicDesktopStyleApplicationLifetime as desktopLifetime -> desktopLifetime.Shutdown 0

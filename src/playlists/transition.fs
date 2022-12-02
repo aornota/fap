@@ -1,5 +1,6 @@
 module Aornota.Fap.Playlists.Transition
 
+open Aornota.Fap
 open Aornota.Fap.Playlists.Model
 open Aornota.Fap.Persistence
 open Aornota.Fap.Utilities
@@ -64,11 +65,14 @@ type Msg =
     | OnStop
     | OnToggleMuted
     | OnVolume of int
+    // From Simulation
+    | SimulationMsg of Simulation.Transition.Msg
     // From App
     | NotifyNewPlaylistRequested
     | NotifyPlaylistOpened of Playlist
     | NotifyFilesAdded of string list
     | NotifyFolderAdded of string
+    | NotifyToggleShowSimulation
     // From MediaPlayer subscriptions
     | NotifyErrored
     | NotifyPlaying
@@ -119,8 +123,32 @@ let private playTrack (track: TrackData) (player: MediaPlayer) =
     use media = new Media(libvlc, path, FromType.FromPath)
     player.Play media |> ignore
 
-let init playlistIds lastTrackId muted volume autoPlay (player: MediaPlayer) =
+let private canEvolveSimulation =
+    function
+    | Simulation.Model.EvolutionState.Paused
+    | Simulation.Model.EvolutionState.Reset
+    | Simulation.Model.EvolutionState.InvalidConfiguration -> true
+    | _ -> false
+
+let private canPauseSimulation =
+    function
+    | Simulation.Model.EvolutionState.Evolving -> true
+    | _ -> false
+
+let private canResetSimulation =
+    function
+    | Simulation.Model.EvolutionState.Evolving
+    | Simulation.Model.EvolutionState.Paused -> true
+    | _ -> false
+
+let init playlistIds lastTrackId muted volume autoPlay showSimulation (player: MediaPlayer) =
     player.Media <- null
+
+    let simulationState =
+        if showSimulation then
+            Some(Simulation.Transition.init ())
+        else
+            None
 
     { Playlists = []
       SelectedPlaylistId = None
@@ -128,7 +156,8 @@ let init playlistIds lastTrackId muted volume autoPlay (player: MediaPlayer) =
       Volume = volume
       TrackState = None
       WritePlaylistRequests = []
-      SeekRequests = [] },
+      SeekRequests = []
+      SimulationState = simulationState },
     [ RequestNoTrack
       ReadPlaylists(playlistIds |> List.rev, lastTrackId, autoPlay, []) ]
 
@@ -279,6 +308,18 @@ let update msg state (player: MediaPlayer) =
         match previousAndNext playlist trackData.Id with
         | Ok (previous, next) ->
             let updatedStateAndCmdAndExternalMsgs =
+                let randomConfigurationCmd =
+                    Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnRandomConfiguration)
+
+                let simulationsCmds =
+                    match state.SimulationState with
+                    | Some simulationState when canResetSimulation simulationState.EvolutionState ->
+                        Cmd.batch
+                            [ Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnReset)
+                              randomConfigurationCmd ]
+                    | Some _ -> randomConfigurationCmd
+                    | None -> Cmd.none
+
                 match state.TrackState with
                 | Some trackState ->
                     if trackState.Track.Id = trackData.Id then
@@ -287,8 +328,13 @@ let update msg state (player: MediaPlayer) =
                                 $"{nameof (RequestTrack)}: {nameof (TrackState)} is already requested {nameof (TrackData)} and not play"
                         else
                             match trackState.PlayerState with
-                            | Playing _ -> Ok({ state with SeekRequests = [] }, Cmd.ofMsg (OnSeek START_POSITION), [])
-                            | _ -> Ok(state, Cmd.ofMsg OnPlay, [])
+                            | Playing _ ->
+                                Ok(
+                                    { state with SeekRequests = [] },
+                                    Cmd.batch [ Cmd.ofMsg (OnSeek START_POSITION); simulationsCmds ],
+                                    []
+                                )
+                            | _ -> Ok(state, Cmd.batch [ Cmd.ofMsg OnPlay; simulationsCmds ], [])
                     else
                         if play then
                             playTrack trackData player
@@ -305,7 +351,7 @@ let update msg state (player: MediaPlayer) =
                             { state with
                                 TrackState = Some updatedTrackState
                                 SeekRequests = [] },
-                            Cmd.none,
+                            simulationsCmds,
                             [ NotifyTrackStateChanged ]
                         )
                 | None ->
@@ -322,7 +368,7 @@ let update msg state (player: MediaPlayer) =
                         { state with
                             TrackState = Some updatedTrackState
                             SeekRequests = [] },
-                        Cmd.none,
+                        simulationsCmds,
                         [ NotifyTrackStateChanged ]
                     )
 
@@ -331,12 +377,18 @@ let update msg state (player: MediaPlayer) =
             | Error error -> notifyError error None
         | Error error -> notifyError $"{nameof (RequestTrack)}: {error}" None
     | RequestNoTrack ->
+        let simulationCmd =
+            match state.SimulationState with
+            | Some simulationState when canResetSimulation simulationState.EvolutionState ->
+                Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnReset)
+            | _ -> Cmd.none
+
         player.Media <- null
 
         { state with
             TrackState = None
             SeekRequests = [] },
-        Cmd.none,
+        simulationCmd,
         [ NotifyTrackStateChanged ]
     | AddToPlaylist trackDatas ->
         match state.SelectedPlaylistId with
@@ -874,10 +926,16 @@ let update msg state (player: MediaPlayer) =
         | Some trackState ->
             match trackState.PlayerState with
             | Playing (position, _) ->
+                let simulationCmd =
+                    match state.SimulationState with
+                    | Some simulationState when canPauseSimulation simulationState.EvolutionState ->
+                        Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnPause)
+                    | _ -> Cmd.none
+
                 player.Pause()
 
                 { state with TrackState = Some { trackState with PlayerState = Paused position } },
-                Cmd.none,
+                simulationCmd,
                 [ NotifyTrackStateChanged ]
             | _ -> notifyError $"{nameof (OnPause)}: {nameof (PlayerState)} is not {nameof (Playing)}" None
         | None -> notifyError $"{nameof (OnPause)}: {nameof (TrackState)} is {nameof (None)}" None
@@ -887,10 +945,16 @@ let update msg state (player: MediaPlayer) =
             match trackState.PlayerState with
             | Playing _
             | Paused _ ->
+                let simulationCmd =
+                    match state.SimulationState with
+                    | Some simulationState when canResetSimulation simulationState.EvolutionState ->
+                        Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnReset)
+                    | _ -> Cmd.none
+
                 player.Stop()
 
                 { state with TrackState = Some { trackState with PlayerState = Stopped START_POSITION } },
-                Cmd.none,
+                simulationCmd,
                 [ NotifyTrackStateChanged ]
             | _ ->
                 notifyError
@@ -919,6 +983,25 @@ let update msg state (player: MediaPlayer) =
             externalMsgs
         else
             noChange
+    // From Simulation
+    | SimulationMsg simulationMsg ->
+        let handleExternal externalMsg =
+            match externalMsg with
+            | Simulation.Transition.ExternalMsg.NotifyError (error, nonDebugMessage) ->
+                NotifyError(error, nonDebugMessage)
+
+        match state.SimulationState with
+        | Some simulationState ->
+            let updatedSimulationState, cmd, externalMsgs =
+                Simulation.Transition.update simulationMsg simulationState
+
+            { state with SimulationState = Some updatedSimulationState },
+            Cmd.map SimulationMsg cmd,
+            externalMsgs |> List.map handleExternal
+        | None ->
+            match simulationMsg with
+            | Simulation.Transition.Msg.Evolved _ -> noChange
+            | _ -> notifyError $"{nameof (SimulationMsg)} ({simulationMsg}) whwn not showing {nameof (Simulation)}" None
     // From App
     | NotifyNewPlaylistRequested ->
         let newPlaylist =
@@ -970,14 +1053,32 @@ let update msg state (player: MediaPlayer) =
                   Duration = None })
 
         state, Cmd.ofMsg (AddToPlaylist tracks), []
+    | NotifyToggleShowSimulation ->
+        match state.SimulationState with
+        | Some _ -> { state with SimulationState = None }, Cmd.none, []
+        | None ->
+            let simulationCmd =
+                match state.TrackState with
+                | Some trackState ->
+                    match trackState.PlayerState with
+                    | Playing _ -> Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnEvolve)
+                    | _ -> Cmd.none
+                | None -> Cmd.none
+
+            { state with SimulationState = Some(Simulation.Transition.init ()) }, simulationCmd, []
     // From MediaPlayer subscriptions
     | NotifyErrored ->
         match state.TrackState with
         | Some trackState ->
             match trackState.PlayerState with
             | AwaitingPlay ->
+                let simulationMsg =
+                    match state.SimulationState with
+                    | Some _ -> Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnReset)
+                    | None -> Cmd.none
+
                 { state with TrackState = Some { trackState with PlayerState = PlaybackErrored } },
-                Cmd.none,
+                simulationMsg,
                 [ NotifyTrackStateChanged ]
             | _ -> notifyError $"{nameof (NotifyErrored)}: {nameof (PlayerState)} is not {nameof (AwaitingPlay)}" None
         | None -> notifyError $"{nameof (NotifyErrored)}: {nameof (TrackState)} is {nameof (None)}" None
@@ -986,14 +1087,21 @@ let update msg state (player: MediaPlayer) =
         | Some trackState ->
             let duration = player.Length * 1L<millisecond>
 
-            let updatedTrackState, externalMsgs =
+            let updatedTrackState, simulationCmd, externalMsgs =
                 match trackState.PlayerState with
                 | AwaitingPlay ->
+                    let simulationMsg =
+                        match state.SimulationState with
+                        | Some simulationState when canEvolveSimulation simulationState.EvolutionState ->
+                            Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnEvolve)
+                        | _ -> Cmd.none
+
                     { trackState with
                         Track = { trackState.Track with Duration = Some duration }
                         PlayerState = Playing(START_POSITION, None) },
+                    simulationMsg,
                     [ NotifyTrackStateChanged ]
-                | _ -> trackState, []
+                | _ -> trackState, Cmd.none, []
 
             if trackState.Track.Duration <> Some duration then
                 match findTrack state.Playlists updatedTrackState.Track.Id with
@@ -1017,7 +1125,7 @@ let update msg state (player: MediaPlayer) =
                             { state with
                                 Playlists = updatedPlaylists
                                 TrackState = Some updatedTrackState },
-                            Cmd.ofMsg (WritePlaylist updatedPlaylist.Id),
+                            Cmd.batch [ simulationCmd; Cmd.ofMsg (WritePlaylist updatedPlaylist.Id) ],
                             externalMsgs
                         | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}" None
                     else if updated = 0 then
@@ -1030,15 +1138,21 @@ let update msg state (player: MediaPlayer) =
                             None
                 | Error error -> notifyError $"{nameof (NotifyPlaying)}: {error}" None
             else
-                { state with TrackState = Some updatedTrackState }, Cmd.none, externalMsgs
+                { state with TrackState = Some updatedTrackState }, simulationCmd, externalMsgs
         | None -> notifyError $"{nameof (NotifyPlaying)}: {nameof (TrackState)} is {nameof (None)}" None
     | NotifyPositionChanged position ->
         match state.TrackState with
         | Some trackState ->
+            let simulationCmd =
+                match state.SimulationState with
+                | Some simulationState when canEvolveSimulation simulationState.EvolutionState ->
+                    Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnEvolve)
+                | _ -> Cmd.none
+
             match trackState.PlayerState with
             | AwaitingPlay ->
                 { state with TrackState = Some { trackState with PlayerState = Playing(position, Some position) } },
-                Cmd.none,
+                simulationCmd,
                 []
             | Playing (currentPosition, _) ->
                 let updatedPosition =
@@ -1047,7 +1161,7 @@ let update msg state (player: MediaPlayer) =
                     | [] -> position
 
                 { state with TrackState = Some { trackState with PlayerState = Playing(updatedPosition, Some position) } },
-                Cmd.none,
+                simulationCmd,
                 []
             | _ ->
                 notifyError
@@ -1062,7 +1176,11 @@ let update msg state (player: MediaPlayer) =
                 let cmd =
                     match trackState.Next with
                     | Some _ -> Cmd.ofMsg OnNext
-                    | _ -> Cmd.none
+                    | _ ->
+                        match state.SimulationState with
+                        | Some simulationState when canResetSimulation simulationState.EvolutionState ->
+                            Cmd.map SimulationMsg (Cmd.ofMsg Simulation.Transition.Msg.OnReset)
+                        | _ -> Cmd.none
 
                 { state with TrackState = Some { trackState with PlayerState = Ended } },
                 cmd,
